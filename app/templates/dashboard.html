@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="px-4 py-6 sm:px-0">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold text-white">Available Updates</h1>
+        <span class="text-sm text-gray-400">Manage your library upgrades</span>
+    </div>
+
+    {% if not updates %}
+    <div class="text-center py-20 bg-gray-800 rounded-lg border border-gray-700 border-dashed">
+        <svg class="mx-auto h-12 w-12 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+        <h3 class="mt-2 text-sm font-medium text-white">All caught up!</h3>
+        <p class="mt-1 text-sm text-gray-500">No new updates found for your library.</p>
+    </div>
+    {% endif %}
+
+    <div class="grid gap-6">
+        {% for item in updates %}
+        <div class="bg-gray-800 shadow rounded-lg overflow-hidden border border-gray-700" id="game-card-{{ item.game.id }}">
+            <div class="px-4 py-4 sm:px-6 bg-gray-800/50 border-b border-gray-700 flex justify-between items-center">
+                <div>
+                    <h3 class="text-lg leading-6 font-medium text-white">{{ item.game.title }}</h3>
+                    <p class="mt-1 max-w-2xl text-sm text-gray-400">Current version date: <span class="text-indigo-400">{{ item.game.current_version_date.strftime('%Y-%m-%d') }}</span></p>
+                </div>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-900 text-indigo-200">
+                    {{ item.releases|length }} New
+                </span>
+            </div>
+            <div class="border-t border-gray-700">
+                <ul role="list" class="divide-y divide-gray-700">
+                    {% for release in item.releases %}
+                    <li class="px-4 py-4 sm:px-6 hover:bg-gray-750 transition" id="release-{{ release.id }}">
+                        <div class="flex items-center justify-between">
+                            <div class="flex-1 min-w-0 pr-4">
+                                <p class="text-sm font-medium text-indigo-300 truncate" title="{{ release.raw_title }}">
+                                    {{ release.raw_title }}
+                                </p>
+                                <div class="mt-2 flex items-center text-sm text-gray-500 gap-4">
+                                    <span class="flex items-center">
+                                        <svg class="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
+                                        {{ release.upload_date.strftime('%Y-%m-%d') }}
+                                    </span>
+                                    <span class="flex items-center">
+                                        <svg class="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                        </svg>
+                                        {{ release.indexer }}
+                                    </span>
+                                    <span class="flex items-center">
+                                        <svg class="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                        </svg>
+                                        {{ release.size }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <button hx-post="/release/{{ release.id }}/dismiss" 
+                                        hx-target="#release-{{ release.id }}" 
+                                        hx-swap="outerHTML"
+                                        class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-gray-400 bg-gray-800 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-gray-500">
+                                    Dismiss
+                                </button>
+                                
+                                <a href="{{ release.info_url or release.magnet_url }}" target="_blank" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-indigo-200 bg-indigo-900 hover:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500">
+                                    Link
+                                </a>
+
+                                <button hx-post="/release/{{ release.id }}/confirm"
+                                        hx-confirm="Are you sure you updated to this version? This will clear older alerts for this game."
+                                        class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-green-500">
+                                    I Have This
+                                </button>
+                            </div>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
