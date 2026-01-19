@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, List
 from sqlmodel import Field, SQLModel, Relationship
 from enum import Enum
@@ -30,23 +30,23 @@ class Game(GameBase, table=True):
     Games are synced from qBittorrent and monitored for updates via Prowlarr.
     """
     id: Optional[int] = Field(default=None, primary_key=True)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
     last_scanned_at: Optional[datetime] = Field(default=None, description="Last Prowlarr scan timestamp")
     
     releases: List["Release"] = Relationship(
         back_populates="game",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan", "lazy": "selectin"}
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
     
     @property
     def has_updates(self) -> bool:
         """Check if game has pending update releases."""
-        return len([r for r in self.releases if not r.is_ignored]) > 0
+        return any(not r.is_ignored for r in self.releases)
     
     @property
     def update_count(self) -> int:
         """Count of non-ignored releases."""
-        return len([r for r in self.releases if not r.is_ignored])
+        return sum(1 for r in self.releases if not r.is_ignored)
 
 
 class ReleaseBase(SQLModel):
@@ -68,7 +68,7 @@ class Release(ReleaseBase, table=True):
     """
     id: Optional[int] = Field(default=None, primary_key=True)
     game_id: int = Field(foreign_key="game.id", index=True)
-    found_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    found_at: datetime = Field(default_factory=datetime.utcnow)
     
     game: Optional[Game] = Relationship(back_populates="releases")
     

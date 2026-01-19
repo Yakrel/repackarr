@@ -1,6 +1,6 @@
 import httpx
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from guessit import guessit
 from sqlmodel import Session, select
 from app.config import get_settings
@@ -116,8 +116,9 @@ class QBitService:
         
         if ts <= 0:
             return False
-            
-        torrent_date = datetime.fromtimestamp(ts, tz=timezone.utc).replace(tzinfo=None)
+        
+        # Use naive datetime for consistency with database
+        torrent_date = datetime.fromtimestamp(ts)
         
         raw_name = torrent.get('name', '')
         if not raw_name:

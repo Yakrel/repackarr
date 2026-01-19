@@ -4,7 +4,7 @@ Coordinates library sync and update search across services.
 """
 import logging
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime
 from sqlmodel import Session, select
 from app.database import engine
 from app.services.qbit import QBitService
@@ -76,7 +76,7 @@ async def run_scan_cycle() -> None:
     
     This is the main orchestration function called by the scheduler.
     """
-    start_time = datetime.now(timezone.utc)
+    start_time = datetime.utcnow()
     logger.info("=" * 50)
     logger.info("Starting full scan cycle...")
     
@@ -86,6 +86,6 @@ async def run_scan_cycle() -> None:
     # Step 2: Search Prowlarr for updates
     scanned = await run_search_updates()
     
-    duration = (datetime.now(timezone.utc) - start_time).total_seconds()
+    duration = (datetime.utcnow() - start_time).total_seconds()
     logger.info(f"Scan cycle completed in {duration:.1f}s")
     logger.info("=" * 50)

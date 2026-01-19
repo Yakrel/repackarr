@@ -32,7 +32,13 @@
                 <img src="{{ item.game.cover_url }}" 
                      alt="{{ item.game.title }}" 
                      class="w-full h-48 lg:h-full object-cover"
-                     loading="lazy">
+                     loading="lazy"
+                     onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                <div class="w-full h-48 lg:h-full items-center justify-center text-dark-500 bg-gradient-to-br from-dark-800 to-dark-900 hidden">
+                    <svg class="w-12 h-12 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    </svg>
+                </div>
                 {% else %}
                 <div class="w-full h-48 lg:h-full flex flex-col items-center justify-center text-dark-500 bg-gradient-to-br from-dark-800 to-dark-900">
                     <svg class="w-12 h-12 mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">

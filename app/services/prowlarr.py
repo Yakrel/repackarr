@@ -1,7 +1,7 @@
 import httpx
 import logging
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime
 from sqlmodel import Session, select
 from app.config import get_settings
 from app.database import engine
@@ -72,8 +72,8 @@ class ProwlarrService:
                 if new_releases_count > 0:
                     logger.info(f"Found {new_releases_count} new release(s) for {game.title}")
                 
-                # Update scan timestamp
-                game.last_scanned_at = datetime.now(timezone.utc)
+                # Update scan timestamp (use naive datetime for consistency)
+                game.last_scanned_at = datetime.utcnow()
                 session.add(game)
                 session.commit()
 
@@ -157,7 +157,7 @@ class ProwlarrService:
             game_id=game.id,
             raw_title=title,
             parsed_version=remote_version,
-            upload_date=upload_date or datetime.now(timezone.utc),
+            upload_date=upload_date or datetime.utcnow(),
             indexer=indexer,
             magnet_url=item.get('magnetUrl') or item.get('downloadUrl'),
             info_url=info_url,
@@ -180,11 +180,12 @@ class ProwlarrService:
             
         try:
             upload_date = datetime.fromisoformat(added_str.replace("Z", "+00:00"))
+            # Convert to naive datetime for consistency
             if upload_date.tzinfo:
                 upload_date = upload_date.astimezone(None).replace(tzinfo=None)
             
             # Prevent future dates (some trackers fake dates)
-            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            now = datetime.utcnow()
             if upload_date > now:
                 logger.warning(f"Future date detected: {upload_date}. Capping to now.")
                 upload_date = now

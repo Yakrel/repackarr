@@ -44,7 +44,7 @@ def get_updates_data(session: Session) -> list:
     statement = (
         select(Release, Game)
         .join(Game)
-        .where(Release.is_ignored == False)
+        .where(Release.is_ignored.is_(False))
         .order_by(Game.title, Release.upload_date.desc())
     )
     results = session.exec(statement).all()
