@@ -10,8 +10,7 @@ from app.services.prowlarr import ProwlarrService
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
-@router.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request, session: Session = Depends(get_session)):
+def get_updates_data(session: Session):
     statement = (
         select(Release, Game)
         .join(Game)
@@ -26,9 +25,22 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
             grouped_updates[game.id] = {"game": game, "releases": []}
         grouped_updates[game.id]["releases"].append(release)
     
+    return grouped_updates.values()
+
+@router.get("/", response_class=HTMLResponse)
+async def dashboard(request: Request, session: Session = Depends(get_session)):
+    updates = get_updates_data(session)
     return templates.TemplateResponse(
         "dashboard.html", 
-        {"request": request, "updates": grouped_updates.values(), "page": "dashboard"}
+        {"request": request, "updates": updates, "page": "dashboard"}
+    )
+
+@router.get("/updates-list", response_class=HTMLResponse)
+async def updates_list(request: Request, session: Session = Depends(get_session)):
+    updates = get_updates_data(session)
+    return templates.TemplateResponse(
+        "partials/updates_list.html", 
+        {"request": request, "updates": updates}
     )
 
 @router.get("/library", response_class=HTMLResponse)
@@ -98,27 +110,26 @@ async def reset_game_scan(id: int, session: Session = Depends(get_session)):
     session.commit()
 
     # 2. Trigger immediate search (background task or await depending on preference)
-    # We await it here so the UI updates immediately with new results (or empty state)
     prowlarr = ProwlarrService()
     try:
         await prowlarr.search_for_game(game.id)
     finally:
         await prowlarr.close()
 
-    # 3. Re-render the dashboard (or just this game's section, but for now full refresh is easier via HTMX)
-    return HTMLResponse("", headers={"HX-Refresh": "true"})
+    # Trigger UI update
+    return HTMLResponse("", headers={"HX-Trigger": "updates-changed"})
 
 @router.post("/scan-now", response_class=HTMLResponse)
 async def trigger_scan():
     await run_scan_cycle()
-    return HTMLResponse("", headers={"HX-Refresh": "true"})
+    return HTMLResponse("", headers={"HX-Trigger": "updates-changed"})
 
 @router.post("/sync-library", response_class=HTMLResponse)
 async def trigger_sync_library():
     await run_sync_library()
-    return HTMLResponse("", headers={"HX-Refresh": "true"})
+    return HTMLResponse("", headers={"HX-Trigger": "updates-changed"})
 
 @router.post("/check-updates", response_class=HTMLResponse)
 async def trigger_check_updates():
     await run_search_updates()
-    return HTMLResponse("", headers={"HX-Refresh": "true"})
+    return HTMLResponse("", headers={"HX-Trigger": "updates-changed"})
