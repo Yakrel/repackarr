@@ -53,6 +53,11 @@ class ProwlarrService:
                     
                     title_lower = title.lower()
                     
+                    # Strict Title Check: Ensure all words from game title are in the release title
+                    game_words = [w.strip().lower() for w in game.title.split() if len(w.strip()) > 2]
+                    if not all(w in title_lower for w in game_words):
+                        continue
+
                     # Platform Filter
                     if any(p in title_lower for p in ["ps5", "ps4", "xbox", "switch", "macos", "android", "mac"]):
                         continue

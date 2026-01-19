@@ -4,7 +4,8 @@ from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 from app.database import get_session
 from app.models import Game, Release
-from app.services.manager import run_scan_cycle
+from app.services.manager import run_scan_cycle, run_sync_library, run_search_updates
+from app.services.prowlarr import ProwlarrService
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -83,7 +84,41 @@ async def update_game_query(id: int, search_query: str = Form(...), session: Ses
     
     return search_query
 
+@router.post("/game/{id}/reset-scan", response_class=HTMLResponse)
+async def reset_game_scan(id: int, session: Session = Depends(get_session)):
+    """Deletes existing found releases for the game and triggers a fresh Prowlarr search."""
+    game = session.get(Game, id)
+    if not game:
+        raise HTTPException(status_code=404)
+
+    # 1. Delete existing releases for this game
+    releases = session.exec(select(Release).where(Release.game_id == id)).all()
+    for release in releases:
+        session.delete(release)
+    session.commit()
+
+    # 2. Trigger immediate search (background task or await depending on preference)
+    # We await it here so the UI updates immediately with new results (or empty state)
+    prowlarr = ProwlarrService()
+    try:
+        await prowlarr.search_for_game(game.id)
+    finally:
+        await prowlarr.close()
+
+    # 3. Re-render the dashboard (or just this game's section, but for now full refresh is easier via HTMX)
+    return HTMLResponse("", headers={"HX-Refresh": "true"})
+
 @router.post("/scan-now", response_class=HTMLResponse)
 async def trigger_scan():
     await run_scan_cycle()
+    return HTMLResponse("", headers={"HX-Refresh": "true"})
+
+@router.post("/sync-library", response_class=HTMLResponse)
+async def trigger_sync_library():
+    await run_sync_library()
+    return HTMLResponse("", headers={"HX-Refresh": "true"})
+
+@router.post("/check-updates", response_class=HTMLResponse)
+async def trigger_check_updates():
+    await run_search_updates()
     return HTMLResponse("", headers={"HX-Refresh": "true"})

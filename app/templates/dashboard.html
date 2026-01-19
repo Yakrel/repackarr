@@ -21,9 +21,20 @@
         {% for item in updates %}
         <div class="bg-gray-800 shadow rounded-lg overflow-hidden border border-gray-700" id="game-card-{{ item.game.id }}">
             <div class="px-4 py-4 sm:px-6 bg-gray-800/50 border-b border-gray-700 flex justify-between items-center">
-                <div>
-                    <h3 class="text-lg leading-6 font-medium text-white">{{ item.game.title }}</h3>
-                    <p class="mt-1 max-w-2xl text-sm text-gray-400">Current version date: <span class="text-indigo-400">{{ item.game.current_version_date.strftime('%Y-%m-%d') }}</span></p>
+                <div class="flex items-center gap-4">
+                    <div>
+                        <h3 class="text-lg leading-6 font-medium text-white">{{ item.game.title }}</h3>
+                        <p class="mt-1 max-w-2xl text-sm text-gray-400">Current version date: <span class="text-indigo-400">{{ item.game.current_version_date.strftime('%Y-%m-%d') }}</span></p>
+                    </div>
+                    <!-- Reset Scan Button -->
+                    <button hx-post="/game/{{ item.game.id }}/reset-scan" 
+                            hx-swap="none"
+                            class="text-gray-500 hover:text-indigo-400 transition" 
+                            title="Clear results and rescan Prowlarr for this game">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </button>
                 </div>
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-900 text-indigo-200">
                     {{ item.releases|length }} New
