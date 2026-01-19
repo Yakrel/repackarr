@@ -51,55 +51,67 @@ class QBitService:
             return
 
         for torrent in torrents:
-            ts = torrent.get('completion_on', 0)
-            if ts <= 0:
-                ts = torrent.get('added_on', 0)
-            
-            torrent_date = datetime.fromtimestamp(ts)
-            
-            raw_name = torrent.get('name', '')
-            parsed = guessit(raw_name)
-            title = parsed.get('title')
-            
-            # Extract version using our new utility
-            detected_version = extract_version(raw_name)
-            
-            if not title:
-                logger.warning(f"Could not parse title from: {raw_name}")
-                continue
+            try:
+                ts = torrent.get('completion_on', 0)
+                if ts <= 0:
+                    ts = torrent.get('added_on', 0)
+                
+                torrent_date = datetime.fromtimestamp(ts)
+                
+                raw_name = torrent.get('name', '')
+                logger.info(f"Processing torrent: {raw_name}")
+                
+                parsed = guessit(raw_name)
+                title = parsed.get('title')
+                
+                # Extract version using our new utility
+                detected_version = extract_version(raw_name)
+                
+                if not title:
+                    logger.warning(f"Could not parse title from: {raw_name}")
+                    continue
 
-            statement = select(Game).where(Game.title == title)
-            game = session.exec(statement).first()
+                statement = select(Game).where(Game.title == title)
+                game = session.exec(statement).first()
 
-            if not game:
-                logger.info(f"New game detected: {title} (v{detected_version})")
-                
-                # Fetch Cover Art
-                cover_url = await self.igdb.get_game_cover(title)
-                
-                new_game = Game(
-                    title=title,
-                    search_query=title,
-                    current_version_date=torrent_date,
-                    current_version=detected_version,
-                    status=GameStatus.MONITORED,
-                    cover_url=cover_url
-                )
-                session.add(new_game)
-            else:
-                # Update logic: If date is newer OR version changed
-                # Note: We trust the torrent date as the ultimate source of "what is currently installed"
-                if torrent_date > game.current_version_date:
-                    logger.info(f"Updating local info for {title}: v{game.current_version} -> v{detected_version}")
-                    game.current_version_date = torrent_date
-                    if detected_version:
-                        game.current_version = detected_version
-                    session.add(game)
-                
-                # Retry cover if missing
-                if not game.cover_url:
-                     game.cover_url = await self.igdb.get_game_cover(title)
-                     session.add(game)
+                if not game:
+                    logger.info(f"New game detected: {title} (v{detected_version}). Fetching cover...")
+                    
+                    cover_url = None
+                    try:
+                        cover_url = await self.igdb.get_game_cover(title)
+                    except Exception as e:
+                        logger.error(f"Failed to fetch cover for {title}: {e}")
+                    
+                    new_game = Game(
+                        title=title,
+                        search_query=title,
+                        current_version_date=torrent_date,
+                        current_version=detected_version,
+                        status=GameStatus.MONITORED,
+                        cover_url=cover_url
+                    )
+                    session.add(new_game)
+                    logger.info(f"Successfully added {title} to database.")
+                else:
+                    # Update logic
+                    if torrent_date > game.current_version_date:
+                        logger.info(f"Updating local info for {title}: v{game.current_version} -> v{detected_version}")
+                        game.current_version_date = torrent_date
+                        if detected_version:
+                            game.current_version = detected_version
+                        session.add(game)
+                    
+                    # Retry cover if missing
+                    if not game.cover_url:
+                        try:
+                            game.cover_url = await self.igdb.get_game_cover(title)
+                            if game.cover_url:
+                                session.add(game)
+                        except Exception:
+                            pass
+            except Exception as e:
+                logger.error(f"Error processing torrent {torrent.get('name')}: {e}")
         
         session.commit()
     
