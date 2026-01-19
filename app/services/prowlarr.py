@@ -79,6 +79,13 @@ class ProwlarrService:
                             upload_date = datetime.fromisoformat(added_str.replace("Z", "+00:00"))
                             if upload_date.tzinfo:
                                 upload_date = upload_date.astimezone(None).replace(tzinfo=None)
+                            
+                            # Time Travel Prevention: Cap future dates to now
+                            # Some trackers fake dates to stay on top
+                            if upload_date > datetime.utcnow():
+                                logger.warning(f"Future date detected for {title}: {upload_date}. Capping to now.")
+                                upload_date = datetime.utcnow()
+                                
                         except ValueError:
                             pass
 

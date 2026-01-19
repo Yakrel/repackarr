@@ -134,14 +134,20 @@ async def toggle_game_monitor(id: int, session: Session = Depends(get_session)):
     session.commit()
     
     # Return the new status badge HTML directly to update the UI without full reload
-    status_color = "green" if game.status == GameStatus.MONITORED else "gray"
-    status_text = "Monitored" if game.status == GameStatus.MONITORED else "Ignored"
-    
-    return f"""
-    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-{status_color}-900 text-{status_color}-200">
-        {status_text}
-    </span>
-    """
+    if game.status == GameStatus.MONITORED:
+        return """
+        <button class="group flex items-center gap-2 px-3 py-1 rounded-full bg-green-900/50 border border-green-700 hover:bg-green-800 transition cursor-pointer w-32 justify-center" title="Click to Stop Monitoring">
+            <span class="h-2 w-2 rounded-full bg-green-400 animate-pulse"></span>
+            <span class="text-xs font-semibold text-green-200 group-hover:text-white">Monitored</span>
+        </button>
+        """
+    else:
+        return """
+        <button class="group flex items-center gap-2 px-3 py-1 rounded-full bg-gray-700/50 border border-gray-600 hover:bg-gray-600 transition cursor-pointer w-32 justify-center" title="Click to Start Monitoring">
+            <span class="h-2 w-2 rounded-full bg-gray-400"></span>
+            <span class="text-xs font-semibold text-gray-300 group-hover:text-white">Ignored</span>
+        </button>
+        """
 
 @router.delete("/game/{id}", response_class=HTMLResponse)
 async def delete_game(id: int, session: Session = Depends(get_session)):
