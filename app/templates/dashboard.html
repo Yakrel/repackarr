@@ -2,6 +2,10 @@
 
 {% block content %}
 <!-- Stats Cards -->
+<div id="stats-cards" 
+     hx-get="/stats-cards" 
+     hx-trigger="load, every 10s, stats-changed from:body"
+     hx-swap="outerHTML">
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
     <div class="bg-dark-800/50 rounded-xl border border-dark-700/50 p-4 hover:border-dark-600/50 transition">
         <div class="flex items-center gap-3">
@@ -59,6 +63,7 @@
             </div>
         </div>
     </div>
+</div>
 </div>
 
 <!-- Updates Section -->

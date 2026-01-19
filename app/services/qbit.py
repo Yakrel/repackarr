@@ -134,6 +134,16 @@ class QBitService:
             logger.warning(f"Could not parse title from: {raw_name}")
             return False
         
+        # Clean up the title - remove common release group patterns
+        # Pattern matches: "-GROUPNAME", ".GROUPNAME", " GROUPNAME" at the end
+        import re
+        title = re.sub(r'[-.\s](?:CODEX|SKIDROW|RELOADED|CPY|FLT|PLAZA|RAZOR1911|HOODLUM|DOGE|RUNE|TiNYiSO|DARKSiDERS|ANOMALY|PROPHET|GOLDBERG|STEAMPUNKS|EMPRESS|DODI|FITGIRL|NECROS|ElAmigos|KaOs|GOG|TENOKE|P2P)$', '', title, flags=re.IGNORECASE)
+        title = title.strip()
+        
+        if not title:
+            logger.warning(f"Title became empty after cleanup from: {raw_name}")
+            return False
+        
         # Extract version
         detected_version = extract_version(raw_name)
         
