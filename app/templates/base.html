@@ -42,6 +42,10 @@
         .htmx-request.htmx-indicator{
             display:inline;
         }
+        /* Hide non-indicator SVGs inside a button during request */
+        button.htmx-request > svg:not(.htmx-indicator) {
+            display: none;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen font-sans">
