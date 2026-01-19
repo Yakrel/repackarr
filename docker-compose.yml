@@ -1,6 +1,5 @@
 services:
   repackarr:
-    image: ghcr.io/yakrel/repackarr:latest  # lowercase required for GHCR
     image: ghcr.io/yakrel/repackarr:latest
     container_name: repackarr
     restart: unless-stopped

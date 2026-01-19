@@ -1,44 +1,83 @@
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Optional, List
 from sqlmodel import Field, SQLModel, Relationship
 from enum import Enum
 
+
 class GameStatus(str, Enum):
+    """Status options for games in the library."""
     MONITORED = "monitored"
     IGNORED = "ignored"
 
+
 class GameBase(SQLModel):
-    title: str = Field(index=True)
-    search_query: str
-    current_version_date: datetime
-    current_version: Optional[str] = None
-    status: str = Field(default=GameStatus.MONITORED)
-    platform_filter: str = "Windows,Linux"
+    """Base model for Game with common attributes."""
+    title: str = Field(index=True, description="Display title of the game")
+    search_query: str = Field(description="Query string used to search for updates")
+    current_version_date: datetime = Field(description="Date of the currently installed version")
+    current_version: Optional[str] = Field(default=None, description="Version string if detected")
+    status: GameStatus = Field(default=GameStatus.MONITORED, description="Monitoring status")
+    platform_filter: str = Field(default="Windows,Linux", description="Allowed platforms")
     
-    # Metadata
-    igdb_id: Optional[int] = None
-    cover_url: Optional[str] = None
+    # IGDB Metadata
+    igdb_id: Optional[int] = Field(default=None, description="IGDB game identifier")
+    cover_url: Optional[str] = Field(default=None, description="URL to game cover image")
+
 
 class Game(GameBase, table=True):
+    """
+    Represents a game in the library.
+    Games are synced from qBittorrent and monitored for updates via Prowlarr.
+    """
     id: Optional[int] = Field(default=None, primary_key=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    last_scanned_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    last_scanned_at: Optional[datetime] = Field(default=None, description="Last Prowlarr scan timestamp")
     
-    releases: list["Release"] = Relationship(back_populates="game", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+    releases: List["Release"] = Relationship(
+        back_populates="game",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan", "lazy": "selectin"}
+    )
+    
+    @property
+    def has_updates(self) -> bool:
+        """Check if game has pending update releases."""
+        return len([r for r in self.releases if not r.is_ignored]) > 0
+    
+    @property
+    def update_count(self) -> int:
+        """Count of non-ignored releases."""
+        return len([r for r in self.releases if not r.is_ignored])
+
 
 class ReleaseBase(SQLModel):
-    raw_title: str
-    parsed_version: Optional[str] = None
-    upload_date: datetime
-    indexer: str
-    magnet_url: Optional[str] = None
-    info_url: Optional[str] = None
-    size: Optional[str] = None
-    is_ignored: bool = Field(default=False)
+    """Base model for Release with common attributes."""
+    raw_title: str = Field(description="Original release title from indexer")
+    parsed_version: Optional[str] = Field(default=None, description="Extracted version string")
+    upload_date: datetime = Field(description="Release upload/publish date")
+    indexer: str = Field(description="Source indexer name")
+    magnet_url: Optional[str] = Field(default=None, description="Magnet or download URL")
+    info_url: Optional[str] = Field(default=None, description="Information page URL")
+    size: Optional[str] = Field(default=None, description="Human-readable file size")
+    is_ignored: bool = Field(default=False, description="Whether release is dismissed")
+
 
 class Release(ReleaseBase, table=True):
+    """
+    Represents a found release/update for a game.
+    Releases are discovered during Prowlarr scans and can be confirmed or dismissed.
+    """
     id: Optional[int] = Field(default=None, primary_key=True)
-    game_id: int = Field(foreign_key="game.id")
-    found_at: datetime = Field(default_factory=datetime.utcnow)
+    game_id: int = Field(foreign_key="game.id", index=True)
+    found_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     
-    game: Game = Relationship(back_populates="releases")
+    game: Optional[Game] = Relationship(back_populates="releases")
+    
+    @property
+    def display_date(self) -> str:
+        """Format upload date for display."""
+        return self.upload_date.strftime('%Y-%m-%d')
+    
+    @property
+    def download_link(self) -> Optional[str]:
+        """Get best available download link."""
+        return self.info_url or self.magnet_url

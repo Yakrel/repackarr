@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Repackarr</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📦</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎮</text></svg>">
     
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
@@ -17,10 +17,45 @@
             theme: {
                 extend: {
                     colors: {
-                        gray: {
-                            900: '#0f172a',
-                            800: '#1e293b',
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            200: '#c7d2fe',
+                            300: '#a5b4fc',
+                            400: '#818cf8',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            800: '#3730a3',
+                            900: '#312e81',
+                        },
+                        dark: {
+                            50: '#f8fafc',
+                            100: '#f1f5f9',
+                            200: '#e2e8f0',
+                            300: '#cbd5e1',
+                            400: '#94a3b8',
+                            500: '#64748b',
+                            600: '#475569',
                             700: '#334155',
+                            800: '#1e293b',
+                            850: '#172033',
+                            900: '#0f172a',
+                            950: '#020617',
+                        }
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.2s ease-out',
+                        'slide-up': 'slideUp 0.3s ease-out',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        slideUp: {
+                            '0%': { opacity: '0', transform: 'translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
                         }
                     }
                 }
@@ -28,76 +63,116 @@
         }
     </script>
     <style>
-        /* Custom scrollbar for webkit */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #0f172a; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: #475569; }
         
-        .htmx-indicator{
-            display:none;
+        /* HTMX indicators */
+        .htmx-indicator { display: none; }
+        .htmx-request .htmx-indicator { display: inline-flex; }
+        .htmx-request.htmx-indicator { display: inline-flex; }
+        .htmx-request > svg:not(.htmx-indicator) { display: none; }
+        
+        /* Smooth transitions */
+        .htmx-swapping { opacity: 0; transition: opacity 0.2s ease-out; }
+        .htmx-settling { opacity: 1; transition: opacity 0.2s ease-in; }
+        
+        /* Glass effect */
+        .glass {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
         }
-        .htmx-request .htmx-indicator{
-            display:inline;
-        }
-        .htmx-request.htmx-indicator{
-            display:inline;
-        }
-        /* Hide non-indicator SVGs inside a button during request */
-        button.htmx-request > svg:not(.htmx-indicator) {
-            display: none;
-        }
+        
+        /* Glow effects */
+        .glow-brand { box-shadow: 0 0 20px rgba(99, 102, 241, 0.3); }
+        .glow-success { box-shadow: 0 0 15px rgba(16, 185, 129, 0.2); }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-100 min-h-screen font-sans">
+<body class="bg-dark-950 text-dark-100 min-h-screen font-sans antialiased">
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div>
 
     <!-- Navbar -->
-    <nav class="border-b border-gray-800 bg-gray-900/50 backdrop-blur fixed w-full z-10 top-0">
+    <nav class="fixed top-0 left-0 right-0 z-40 glass border-b border-dark-700/50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0 font-bold text-xl text-indigo-500 tracking-wider">
-                        REPACK<span class="text-white">ARR</span>
-                    </div>
-                    <div class="hidden md:block">
-                        <div class="ml-10 flex items-baseline space-x-4">
-                            <a href="/" class="{% if page == 'dashboard' %}bg-gray-800 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} px-3 py-2 rounded-md text-sm font-medium transition">Dashboard</a>
-                            <a href="/library" class="{% if page == 'library' %}bg-gray-800 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} px-3 py-2 rounded-md text-sm font-medium transition">Library</a>
-                        </div>
+                <!-- Logo & Nav Links -->
+                <div class="flex items-center gap-8">
+                    <a href="/" class="flex items-center gap-2 group">
+                        <span class="text-2xl">🎮</span>
+                        <span class="font-bold text-xl tracking-tight">
+                            <span class="text-brand-400 group-hover:text-brand-300 transition">REPACK</span><span class="text-dark-100">ARR</span>
+                        </span>
+                    </a>
+                    
+                    <div class="hidden md:flex items-center gap-1">
+                        <a href="/" class="{% if page == 'dashboard' %}bg-dark-700/50 text-white{% else %}text-dark-300 hover:text-white hover:bg-dark-800/50{% endif %} px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                            </svg>
+                            Dashboard
+                        </a>
+                        <a href="/library" class="{% if page == 'library' %}bg-dark-700/50 text-white{% else %}text-dark-300 hover:text-white hover:bg-dark-800/50{% endif %} px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                            Library
+                        </a>
                     </div>
                 </div>
-                <div class="flex items-center space-x-2">
-                    <!-- Sync Library -->
-                    <button hx-post="/sync-library" hx-indicator="#sync-spinner" hx-swap="none" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-md text-sm font-medium transition flex items-center gap-2" title="Update library from qBittorrent">
-                        <svg id="sync-spinner" class="animate-spin h-4 w-4 text-white htmx-indicator" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                
+                <!-- Action Buttons -->
+                <div class="flex items-center gap-2">
+                    <!-- Sync Library Button -->
+                    <button 
+                        hx-post="/sync-library" 
+                        hx-indicator="#sync-spinner" 
+                        hx-swap="none"
+                        class="relative flex items-center gap-2 px-3 py-2 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-600/50 text-sm font-medium transition-all group"
+                        title="Sync library from qBittorrent">
+                        <svg id="sync-spinner" class="animate-spin h-4 w-4 text-brand-400 htmx-indicator" viewBox="0 0 24 24" fill="none">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        <svg class="h-4 w-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg class="w-4 h-4 text-dark-400 group-hover:text-dark-200 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
-                        <span class="hidden sm:inline">Sync Lib</span>
+                        <span class="hidden sm:inline text-dark-300 group-hover:text-white transition">Sync</span>
                     </button>
 
-                    <!-- Check Updates -->
-                    <button hx-post="/check-updates" hx-indicator="#update-spinner" hx-swap="none" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-md text-sm font-medium transition flex items-center gap-2" title="Search Prowlarr for updates">
-                        <svg id="update-spinner" class="animate-spin h-4 w-4 text-white htmx-indicator" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <!-- Check Updates Button -->
+                    <button 
+                        hx-post="/check-updates" 
+                        hx-indicator="#update-spinner" 
+                        hx-swap="none"
+                        class="relative flex items-center gap-2 px-3 py-2 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-600/50 text-sm font-medium transition-all group"
+                        title="Search Prowlarr for updates">
+                        <svg id="update-spinner" class="animate-spin h-4 w-4 text-brand-400 htmx-indicator" viewBox="0 0 24 24" fill="none">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        <svg class="h-4 w-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg class="w-4 h-4 text-dark-400 group-hover:text-dark-200 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
-                        <span class="hidden sm:inline">Updates</span>
+                        <span class="hidden sm:inline text-dark-300 group-hover:text-white transition">Search</span>
                     </button>
 
-                    <!-- Full Scan -->
-                    <button hx-post="/scan-now" hx-indicator="#scan-spinner" hx-swap="none" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-md text-sm font-medium transition flex items-center gap-2" title="Sync Library & Check Updates">
-                        <svg id="scan-spinner" class="animate-spin h-4 w-4 text-white htmx-indicator" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <!-- Full Scan Button -->
+                    <button 
+                        hx-post="/scan-now" 
+                        hx-indicator="#scan-spinner" 
+                        hx-swap="none"
+                        class="relative flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold transition-all shadow-lg shadow-brand-600/20 hover:shadow-brand-500/30"
+                        title="Full scan: Sync + Search">
+                        <svg id="scan-spinner" class="animate-spin h-4 w-4 htmx-indicator" viewBox="0 0 24 24" fill="none">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        <svg class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                         </svg>
                         <span>Full Scan</span>
@@ -107,10 +182,63 @@
         </div>
     </nav>
 
-    <!-- Content -->
-    <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8 mt-16">
+    <!-- Mobile Navigation -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 glass border-t border-dark-700/50 safe-area-pb">
+        <div class="flex items-center justify-around h-16">
+            <a href="/" class="flex flex-col items-center gap-1 px-4 py-2 {% if page == 'dashboard' %}text-brand-400{% else %}text-dark-400{% endif %}">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                </svg>
+                <span class="text-[10px] font-medium">Dashboard</span>
+            </a>
+            <a href="/library" class="flex flex-col items-center gap-1 px-4 py-2 {% if page == 'library' %}text-brand-400{% else %}text-dark-400{% endif %}">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                <span class="text-[10px] font-medium">Library</span>
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 mt-20 mb-20 md:mb-6">
         {% block content %}{% endblock %}
     </main>
 
+    <!-- Toast notification script -->
+    <script>
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const colors = {
+                success: 'bg-emerald-500/90 border-emerald-400/50',
+                error: 'bg-red-500/90 border-red-400/50',
+                info: 'bg-brand-500/90 border-brand-400/50'
+            };
+            toast.className = `${colors[type]} text-white px-4 py-3 rounded-lg border shadow-lg animate-slide-up flex items-center gap-2`;
+            toast.innerHTML = `
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    ${type === 'success' ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />' : ''}
+                    ${type === 'error' ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />' : ''}
+                    ${type === 'info' ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />' : ''}
+                </svg>
+                <span class="text-sm font-medium">${message}</span>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                toast.style.transition = 'all 0.3s ease-out';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Listen for HTMX events
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            if (evt.detail.successful && evt.detail.xhr.getResponseHeader('HX-Trigger') === 'updates-changed') {
+                showToast('Operation completed', 'success');
+            }
+        });
+    </script>
 </body>
 </html>
