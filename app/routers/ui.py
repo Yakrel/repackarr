@@ -98,6 +98,19 @@ async def library(request: Request, session: Session = Depends(get_session)):
     )
 
 
+@router.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request, session: Session = Depends(get_session)):
+    """Settings page showing configuration."""
+    return templates.TemplateResponse(
+        "settings.html", 
+        {
+            "request": request, 
+            "page": "settings",
+            "settings": settings
+        }
+    )
+
+
 # ============================================
 # HTMX Partial Routes
 # ============================================
@@ -355,3 +368,77 @@ async def trigger_check_updates():
     """Check Prowlarr for updates."""
     await run_search_updates()
     return HTMLResponse("", headers={"HX-Trigger": "updates-changed, stats-changed"})
+
+
+# ============================================
+# Settings & Test Endpoints
+# ============================================
+
+@router.post("/test-qbit-connection", response_class=HTMLResponse)
+async def test_qbit_connection():
+    """Test qBittorrent connection."""
+    from app.services.qbit import QBitService
+    qbit = QBitService()
+    try:
+        success = await qbit.login()
+        if success:
+            return HTMLResponse("""
+                <div class="flex items-center gap-2 text-green-400">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Connection successful</span>
+                </div>
+            """)
+        else:
+            return HTMLResponse("""
+                <div class="flex items-center gap-2 text-red-400">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    <span>Connection failed - check credentials</span>
+                </div>
+            """)
+    except Exception as e:
+        return HTMLResponse(f"""
+            <div class="flex items-center gap-2 text-red-400">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Error: {str(e)[:100]}</span>
+            </div>
+        """)
+    finally:
+        await qbit.close()
+
+
+@router.post("/test-prowlarr-connection", response_class=HTMLResponse)
+async def test_prowlarr_connection():
+    """Test Prowlarr connection."""
+    from app.services.prowlarr import ProwlarrService
+    prowlarr = ProwlarrService()
+    try:
+        resp = await prowlarr.client.get(
+            f"{prowlarr.base_url}/api/v1/health",
+            headers=prowlarr.headers
+        )
+        resp.raise_for_status()
+        return HTMLResponse("""
+            <div class="flex items-center gap-2 text-green-400">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Connection successful</span>
+            </div>
+        """)
+    except Exception as e:
+        return HTMLResponse(f"""
+            <div class="flex items-center gap-2 text-red-400">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Error: {str(e)[:100]}</span>
+            </div>
+        """)
+    finally:
+        await prowlarr.close()
