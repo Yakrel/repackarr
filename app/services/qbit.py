@@ -5,6 +5,7 @@ from guessit import guessit
 from sqlmodel import Session, select
 from app.config import get_settings
 from app.models import Game, GameStatus
+from app.services.igdb import IGDBService
 from app.utils import extract_version
 
 logger = logging.getLogger("repackarr")
@@ -15,6 +16,7 @@ class QBitService:
         self.base_url = settings.QBIT_HOST.rstrip('/')
         self.client = httpx.AsyncClient(timeout=30.0, verify=False)
         self.cookies = {}
+        self.igdb = IGDBService()
 
     async def login(self):
         try:
@@ -71,12 +73,17 @@ class QBitService:
 
             if not game:
                 logger.info(f"New game detected: {title} (v{detected_version})")
+                
+                # Fetch Cover Art
+                cover_url = await self.igdb.get_game_cover(title)
+                
                 new_game = Game(
                     title=title,
                     search_query=title,
                     current_version_date=torrent_date,
                     current_version=detected_version,
-                    status=GameStatus.MONITORED
+                    status=GameStatus.MONITORED,
+                    cover_url=cover_url
                 )
                 session.add(new_game)
             else:
@@ -88,8 +95,14 @@ class QBitService:
                     if detected_version:
                         game.current_version = detected_version
                     session.add(game)
+                
+                # Retry cover if missing
+                if not game.cover_url:
+                     game.cover_url = await self.igdb.get_game_cover(title)
+                     session.add(game)
         
         session.commit()
     
     async def close(self):
         await self.client.aclose()
+        await self.igdb.close()

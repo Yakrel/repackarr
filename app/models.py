@@ -14,6 +14,10 @@ class GameBase(SQLModel):
     current_version: Optional[str] = None
     status: str = Field(default=GameStatus.MONITORED)
     platform_filter: str = "Windows,Linux"
+    
+    # Metadata
+    igdb_id: Optional[int] = None
+    cover_url: Optional[str] = None
 
 class Game(GameBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

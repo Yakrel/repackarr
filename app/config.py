@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     # Prowlarr
     PROWLARR_URL: str
     PROWLARR_API_KEY: str
+
+    # IGDB (Optional but recommended)
+    IGDB_CLIENT_ID: str | None = None
+    IGDB_CLIENT_SECRET: str | None = None
     
     # Business Logic
     PLATFORM_FILTER: str = "Windows,Linux" # Comma separated
