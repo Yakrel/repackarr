@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 from app.database import get_session
-from app.models import Game, Release
+from app.models import Game, Release, GameStatus
 from app.services.manager import run_scan_cycle, run_sync_library, run_search_updates
 from app.services.prowlarr import ProwlarrService
 
@@ -116,8 +116,43 @@ async def reset_game_scan(id: int, session: Session = Depends(get_session)):
     finally:
         await prowlarr.close()
 
-    # Trigger UI update
+    # 3. Re-render the dashboard (or just this game's section, but for now full refresh is easier via HTMX)
     return HTMLResponse("", headers={"HX-Trigger": "updates-changed"})
+
+@router.post("/game/{id}/toggle-monitor", response_class=HTMLResponse)
+async def toggle_game_monitor(id: int, session: Session = Depends(get_session)):
+    game = session.get(Game, id)
+    if not game:
+        raise HTTPException(status_code=404)
+    
+    if game.status == GameStatus.MONITORED:
+        game.status = GameStatus.IGNORED
+    else:
+        game.status = GameStatus.MONITORED
+        
+    session.add(game)
+    session.commit()
+    
+    # Return the new status badge HTML directly to update the UI without full reload
+    status_color = "green" if game.status == GameStatus.MONITORED else "gray"
+    status_text = "Monitored" if game.status == GameStatus.MONITORED else "Ignored"
+    
+    return f"""
+    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-{status_color}-900 text-{status_color}-200">
+        {status_text}
+    </span>
+    """
+
+@router.delete("/game/{id}", response_class=HTMLResponse)
+async def delete_game(id: int, session: Session = Depends(get_session)):
+    game = session.get(Game, id)
+    if not game:
+        raise HTTPException(status_code=404)
+        
+    session.delete(game)
+    session.commit()
+    
+    return "" # HTMX will remove the row
 
 @router.post("/scan-now", response_class=HTMLResponse)
 async def trigger_scan():
