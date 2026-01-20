@@ -98,9 +98,38 @@ async def library(request: Request, session: Session = Depends(get_session)):
     )
 
 
+@router.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request, session: Session = Depends(get_session)):
+    """Settings page showing configuration."""
+    return templates.TemplateResponse(
+        "settings.html", 
+        {
+            "request": request, 
+            "page": "settings",
+            "settings": settings
+        }
+    )
+
+
 # ============================================
 # HTMX Partial Routes
 # ============================================
+
+@router.get("/stats-cards", response_class=HTMLResponse)
+async def stats_cards(request: Request, session: Session = Depends(get_session)):
+    """HTMX partial: Returns updated stats cards."""
+    stats = get_dashboard_stats(session)
+    
+    return templates.TemplateResponse(
+        "partials/stats_cards.html",
+        {
+            "request": request,
+            "stats": stats,
+            "page": request.headers.get("Hx-Current-Url", "").split("/")[-1] or "dashboard",
+            "settings": settings
+        }
+    )
+
 
 @router.get("/updates-list", response_class=HTMLResponse)
 async def updates_list(request: Request, session: Session = Depends(get_session)):
@@ -129,7 +158,7 @@ async def dismiss_release(id: int, session: Session = Depends(get_session)):
     session.add(release)
     session.commit()
     
-    return ""  # HTMX removes the element
+    return HTMLResponse("", headers={"HX-Trigger": "stats-changed"})  # HTMX removes the element
 
 
 @router.post("/release/{id}/confirm", response_class=HTMLResponse)
@@ -233,18 +262,18 @@ async def toggle_game_monitor(id: int, session: Session = Depends(get_session)):
     # Return the new status badge
     if game.status == GameStatus.MONITORED:
         return HTMLResponse("""
-        <button class="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 hover:bg-emerald-500/30 transition cursor-pointer">
-            <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span class="text-xs font-semibold text-emerald-300 uppercase tracking-wide">Monitored</span>
+        <button class="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 hover:bg-emerald-500/30 hover:border-emerald-500/50 transition cursor-pointer shadow-sm hover:shadow-md">
+            <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse group-hover:animate-none"></span>
+            <span class="text-xs font-semibold text-emerald-300 group-hover:text-emerald-200 uppercase tracking-wide">Monitored</span>
         </button>
-        """)
+        """, headers={"HX-Trigger": "stats-changed"})
     else:
         return HTMLResponse("""
-        <button class="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-600/30 border border-slate-500/30 hover:bg-slate-500/30 transition cursor-pointer">
-            <span class="h-2 w-2 rounded-full bg-slate-400"></span>
-            <span class="text-xs font-semibold text-slate-300 uppercase tracking-wide">Ignored</span>
+        <button class="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-600/30 border border-slate-500/30 hover:bg-slate-500/40 hover:border-slate-500/50 transition cursor-pointer shadow-sm hover:shadow-md">
+            <span class="h-2 w-2 rounded-full bg-slate-400 group-hover:bg-slate-300"></span>
+            <span class="text-xs font-semibold text-slate-300 group-hover:text-slate-200 uppercase tracking-wide">Ignored</span>
         </button>
-        """)
+        """, headers={"HX-Trigger": "stats-changed"})
 
 
 @router.delete("/game/{id}", response_class=HTMLResponse)
@@ -257,7 +286,7 @@ async def delete_game(id: int, session: Session = Depends(get_session)):
     session.delete(game)
     session.commit()
     
-    return ""  # HTMX removes the row
+    return HTMLResponse("", headers={"HX-Trigger": "stats-changed"})  # HTMX removes the row
 
 
 # ============================================
@@ -268,18 +297,92 @@ async def delete_game(id: int, session: Session = Depends(get_session)):
 async def trigger_scan():
     """Trigger a full scan cycle (sync library + check updates)."""
     await run_scan_cycle()
-    return HTMLResponse("", headers={"HX-Trigger": "updates-changed"})
+    return HTMLResponse("", headers={"HX-Trigger": "updates-changed, stats-changed"})
 
 
 @router.post("/sync-library", response_class=HTMLResponse)
 async def trigger_sync_library():
     """Sync library from qBittorrent."""
     await run_sync_library()
-    return HTMLResponse("", headers={"HX-Trigger": "updates-changed"})
+    return HTMLResponse("", headers={"HX-Trigger": "updates-changed, stats-changed"})
 
 
 @router.post("/check-updates", response_class=HTMLResponse)
 async def trigger_check_updates():
     """Check Prowlarr for updates."""
     await run_search_updates()
-    return HTMLResponse("", headers={"HX-Trigger": "updates-changed"})
+    return HTMLResponse("", headers={"HX-Trigger": "updates-changed, stats-changed"})
+
+
+# ============================================
+# Settings & Test Endpoints
+# ============================================
+
+@router.post("/test-qbit-connection", response_class=HTMLResponse)
+async def test_qbit_connection():
+    """Test qBittorrent connection."""
+    from app.services.qbit import QBitService
+    qbit = QBitService()
+    try:
+        success = await qbit.login()
+        if success:
+            return HTMLResponse("""
+                <div class="flex items-center gap-2 text-green-400">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Connection successful</span>
+                </div>
+            """)
+        else:
+            return HTMLResponse("""
+                <div class="flex items-center gap-2 text-red-400">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    <span>Connection failed - check credentials</span>
+                </div>
+            """)
+    except Exception as e:
+        return HTMLResponse(f"""
+            <div class="flex items-center gap-2 text-red-400">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Error: {str(e)[:100]}</span>
+            </div>
+        """)
+    finally:
+        await qbit.close()
+
+
+@router.post("/test-prowlarr-connection", response_class=HTMLResponse)
+async def test_prowlarr_connection():
+    """Test Prowlarr connection."""
+    from app.services.prowlarr import ProwlarrService
+    prowlarr = ProwlarrService()
+    try:
+        resp = await prowlarr.client.get(
+            f"{prowlarr.base_url}/api/v1/health",
+            headers=prowlarr.headers
+        )
+        resp.raise_for_status()
+        return HTMLResponse("""
+            <div class="flex items-center gap-2 text-green-400">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Connection successful</span>
+            </div>
+        """)
+    except Exception as e:
+        return HTMLResponse(f"""
+            <div class="flex items-center gap-2 text-red-400">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Error: {str(e)[:100]}</span>
+            </div>
+        """)
+    finally:
+        await prowlarr.close()

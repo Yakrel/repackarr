@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Settings Header -->
+<div class="mb-8">
+    <h1 class="text-2xl font-bold text-white mb-2">Settings</h1>
+    <p class="text-sm text-dark-400">Application configuration and connection status</p>
+</div>
+
+<!-- Configuration Cards -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    
+    <!-- qBittorrent Connection -->
+    <div class="bg-dark-800/50 rounded-2xl border border-dark-700/50 p-6">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="p-2 rounded-lg bg-blue-500/20">
+                <svg class="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+            </div>
+            <div>
+                <h2 class="text-lg font-bold text-white">qBittorrent</h2>
+                <p class="text-xs text-dark-400">Torrent client connection</p>
+            </div>
+        </div>
+        
+        <div class="space-y-3">
+            <div>
+                <label class="block text-xs font-medium text-dark-400 mb-1">Host</label>
+                <div class="bg-dark-900/50 border border-dark-600/50 rounded-lg px-3 py-2">
+                    <code class="text-sm text-dark-200">{{ settings.QBIT_HOST }}</code>
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-dark-400 mb-1">Category</label>
+                <div class="bg-dark-900/50 border border-dark-600/50 rounded-lg px-3 py-2">
+                    <code class="text-sm text-dark-200">{{ settings.QBIT_CATEGORY }}</code>
+                </div>
+            </div>
+            <div class="pt-2">
+                <button 
+                    hx-post="/test-qbit-connection" 
+                    hx-target="#qbit-status"
+                    hx-swap="innerHTML"
+                    class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Test Connection
+                </button>
+                <div id="qbit-status" class="mt-2 text-sm"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Prowlarr Connection -->
+    <div class="bg-dark-800/50 rounded-2xl border border-dark-700/50 p-6">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="p-2 rounded-lg bg-purple-500/20">
+                <svg class="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+            </div>
+            <div>
+                <h2 class="text-lg font-bold text-white">Prowlarr</h2>
+                <p class="text-xs text-dark-400">Indexer manager connection</p>
+            </div>
+        </div>
+        
+        <div class="space-y-3">
+            <div>
+                <label class="block text-xs font-medium text-dark-400 mb-1">URL</label>
+                <div class="bg-dark-900/50 border border-dark-600/50 rounded-lg px-3 py-2">
+                    <code class="text-sm text-dark-200">{{ settings.PROWLARR_URL }}</code>
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-dark-400 mb-1">API Key</label>
+                <div class="bg-dark-900/50 border border-dark-600/50 rounded-lg px-3 py-2">
+                    <code class="text-sm text-dark-200">{{ settings.PROWLARR_API_KEY[:4] if settings.PROWLARR_API_KEY else '' }}...{{ settings.PROWLARR_API_KEY[-4:] if settings.PROWLARR_API_KEY else '' }}</code>
+                </div>
+            </div>
+            <div class="pt-2">
+                <button 
+                    hx-post="/test-prowlarr-connection" 
+                    hx-target="#prowlarr-status"
+                    hx-swap="innerHTML"
+                    class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold transition">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Test Connection
+                </button>
+                <div id="prowlarr-status" class="mt-2 text-sm"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- IGDB Integration -->
+    <div class="bg-dark-800/50 rounded-2xl border border-dark-700/50 p-6">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="p-2 rounded-lg bg-green-500/20">
+                <svg class="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+            </div>
+            <div>
+                <h2 class="text-lg font-bold text-white">IGDB</h2>
+                <p class="text-xs text-dark-400">Game metadata & covers</p>
+            </div>
+        </div>
+        
+        <div class="space-y-3">
+            <div>
+                <label class="block text-xs font-medium text-dark-400 mb-1">Status</label>
+                <div class="flex items-center gap-2 px-3 py-2 rounded-lg {% if settings.is_igdb_enabled %}bg-green-500/10 border border-green-500/30{% else %}bg-slate-500/10 border border-slate-500/30{% endif %}">
+                    {% if settings.is_igdb_enabled %}
+                    <span class="h-2 w-2 rounded-full bg-green-400 animate-pulse"></span>
+                    <span class="text-xs font-semibold text-green-300">Enabled</span>
+                    {% else %}
+                    <span class="h-2 w-2 rounded-full bg-slate-400"></span>
+                    <span class="text-xs font-semibold text-slate-300">Disabled</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% if not settings.is_igdb_enabled %}
+            <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+                <p class="text-xs text-amber-300">IGDB integration is disabled. Set IGDB_CLIENT_ID and IGDB_CLIENT_SECRET in your .env file to enable game covers.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Scan Configuration -->
+    <div class="bg-dark-800/50 rounded-2xl border border-dark-700/50 p-6">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="p-2 rounded-lg bg-cyan-500/20">
+                <svg class="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </div>
+            <div>
+                <h2 class="text-lg font-bold text-white">Scan Settings</h2>
+                <p class="text-xs text-dark-400">Automatic scan configuration</p>
+            </div>
+        </div>
+        
+        <div class="space-y-3">
+            <div>
+                <label class="block text-xs font-medium text-dark-400 mb-1">Scan Interval</label>
+                <div class="bg-dark-900/50 border border-dark-600/50 rounded-lg px-3 py-2">
+                    <code class="text-sm text-dark-200">{{ settings.CRON_INTERVAL_MINUTES }} minutes</code>
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-dark-400 mb-1">Platform Filter</label>
+                <div class="bg-dark-900/50 border border-dark-600/50 rounded-lg px-3 py-2">
+                    <code class="text-sm text-dark-200">{{ settings.PLATFORM_FILTER }}</code>
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-dark-400 mb-1">Ignored Keywords</label>
+                <div class="bg-dark-900/50 border border-dark-600/50 rounded-lg px-3 py-2 max-h-20 overflow-y-auto">
+                    <code class="text-xs text-dark-200 break-words">{{ settings.IGNORED_KEYWORDS }}</code>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Info Note -->
+<div class="mt-8 bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+    <div class="flex gap-3">
+        <svg class="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <div>
+            <p class="text-sm font-semibold text-blue-300 mb-1">Configuration Note</p>
+            <p class="text-sm text-blue-200/80">All settings are configured via environment variables in your <code class="px-1.5 py-0.5 bg-dark-900/50 rounded text-xs">docker-compose.yml</code> or <code class="px-1.5 py-0.5 bg-dark-900/50 rounded text-xs">.env</code> file. Restart the container for changes to take effect.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

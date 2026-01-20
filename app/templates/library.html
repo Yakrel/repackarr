@@ -2,64 +2,7 @@
 
 {% block content %}
 <!-- Stats Cards -->
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-    <div class="bg-dark-800/50 rounded-xl border border-dark-700/50 p-4 hover:border-dark-600/50 transition">
-        <div class="flex items-center gap-3">
-            <div class="p-2 rounded-lg bg-brand-500/20">
-                <svg class="w-5 h-5 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-            </div>
-            <div>
-                <p class="text-2xl font-bold text-white">{{ stats.total_games }}</p>
-                <p class="text-xs text-dark-400">Total Games</p>
-            </div>
-        </div>
-    </div>
-    
-    <div class="bg-dark-800/50 rounded-xl border border-dark-700/50 p-4 hover:border-dark-600/50 transition">
-        <div class="flex items-center gap-3">
-            <div class="p-2 rounded-lg bg-emerald-500/20">
-                <svg class="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-            </div>
-            <div>
-                <p class="text-2xl font-bold text-white">{{ stats.monitored_games }}</p>
-                <p class="text-xs text-dark-400">Monitored</p>
-            </div>
-        </div>
-    </div>
-    
-    <div class="bg-dark-800/50 rounded-xl border border-dark-700/50 p-4 hover:border-dark-600/50 transition">
-        <div class="flex items-center gap-3">
-            <div class="p-2 rounded-lg bg-slate-500/20">
-                <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                </svg>
-            </div>
-            <div>
-                <p class="text-2xl font-bold text-white">{{ stats.total_games - stats.monitored_games }}</p>
-                <p class="text-xs text-dark-400">Ignored</p>
-            </div>
-        </div>
-    </div>
-    
-    <div class="bg-dark-800/50 rounded-xl border border-dark-700/50 p-4 hover:border-dark-600/50 transition">
-        <div class="flex items-center gap-3">
-            <div class="p-2 rounded-lg bg-amber-500/20">
-                <svg class="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-            </div>
-            <div>
-                <p class="text-2xl font-bold text-white">{{ stats.pending_updates }}</p>
-                <p class="text-xs text-dark-400">Updates Found</p>
-            </div>
-        </div>
-    </div>
-</div>
+{% include "partials/stats_cards.html" %}
 
 <!-- Section Header -->
 <div class="flex items-center justify-between mb-6">
@@ -102,7 +45,7 @@
                     <th class="px-6 py-4 text-left text-xs font-semibold text-dark-400 uppercase tracking-wider hidden lg:table-cell">Version Date</th>
                     <th class="px-6 py-4 text-left text-xs font-semibold text-dark-400 uppercase tracking-wider">Status</th>
                     <th class="px-6 py-4 text-left text-xs font-semibold text-dark-400 uppercase tracking-wider hidden lg:table-cell">Last Scan</th>
-                    <th class="px-6 py-4 text-right text-xs font-semibold text-dark-400 uppercase tracking-wider">Actions</th>
+                    <th class="px-6 py-4 text-center text-xs font-semibold text-dark-400 uppercase tracking-wider">Actions</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-dark-700/30">
@@ -165,14 +108,14 @@
                         hx-target="this" 
                         hx-swap="innerHTML">
                         {% if game.status == 'monitored' %}
-                        <button class="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 hover:bg-emerald-500/30 transition cursor-pointer">
-                            <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                            <span class="text-xs font-semibold text-emerald-300 uppercase tracking-wide">Monitored</span>
+                        <button class="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 hover:bg-emerald-500/30 hover:border-emerald-500/50 transition cursor-pointer shadow-sm hover:shadow-md">
+                            <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse group-hover:animate-none"></span>
+                            <span class="text-xs font-semibold text-emerald-300 group-hover:text-emerald-200 uppercase tracking-wide">Monitored</span>
                         </button>
                         {% else %}
-                        <button class="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-600/30 border border-slate-500/30 hover:bg-slate-500/30 transition cursor-pointer">
-                            <span class="h-2 w-2 rounded-full bg-slate-400"></span>
-                            <span class="text-xs font-semibold text-slate-300 uppercase tracking-wide">Ignored</span>
+                        <button class="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-600/30 border border-slate-500/30 hover:bg-slate-500/40 hover:border-slate-500/50 transition cursor-pointer shadow-sm hover:shadow-md">
+                            <span class="h-2 w-2 rounded-full bg-slate-400 group-hover:bg-slate-300"></span>
+                            <span class="text-xs font-semibold text-slate-300 group-hover:text-slate-200 uppercase tracking-wide">Ignored</span>
                         </button>
                         {% endif %}
                     </td>
@@ -188,12 +131,12 @@
                     
                     <!-- Actions -->
                     <td class="px-6 py-4">
-                        <div class="flex items-center justify-end gap-1">
+                        <div class="flex items-center justify-center gap-1">
                             <button hx-delete="/game/{{ game.id }}" 
                                     hx-confirm="Delete {{ game.title }} from library?"
                                     hx-target="#game-row-{{ game.id }}" 
                                     hx-swap="outerHTML swap:0.2s"
-                                    class="p-2 rounded-lg text-dark-500 hover:text-red-400 hover:bg-red-500/10 transition opacity-0 group-hover:opacity-100"
+                                    class="p-2 rounded-lg text-dark-400 hover:text-red-400 hover:bg-red-500/10 transition"
                                     title="Delete from library">
                                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
