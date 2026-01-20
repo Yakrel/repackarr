@@ -324,6 +324,11 @@
                             progressBar.classList.add('hidden');
                             progressFill.style.width = '0%';
                         }, 1500);
+                        
+                        // Trigger HTMX events to refresh updates list, stats, and activity log
+                        htmx.trigger(document.body, 'updates-changed');
+                        htmx.trigger(document.body, 'stats-changed');
+                        htmx.trigger(document.body, 'activity-changed');
                     } else {
                         progressBar.classList.add('hidden');
                     }

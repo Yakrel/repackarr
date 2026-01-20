@@ -34,9 +34,9 @@
                 <div class="space-y-3">
                     {% for game_skip in details.skipped_activity %}
                     <div class="bg-dark-900/50 rounded-lg p-3 border border-dark-700/50">
-                        <div class="text-emerald-400 font-medium text-sm mb-2">{{ game_skip.game }}</div>
+                        <div class="text-emerald-400 font-medium text-sm mb-2">{{ game_skip['game'] }}</div>
                         <div class="space-y-2 pl-2 border-l-2 border-dark-700">
-                            {% for item in game_skip.items %}
+                            {% for item in game_skip['items'] %}
                             <div class="text-xs group border-b border-dark-800/50 pb-2 last:border-0 last:pb-0">
                                 <div class="flex justify-between items-start gap-2">
                                     <div class="flex-1 min-w-0">
@@ -47,9 +47,9 @@
                                             <span class="text-amber-500/80">{{ item.reason }}</span>
                                         </div>
                                     </div>
-                                    {% if game_skip.game_id %}
+                                    {% if game_skip['game_id'] %}
                                     <form hx-post="/release/force-add" hx-swap="outerHTML" class="flex-shrink-0">
-                                        <input type="hidden" name="game_id" value="{{ game_skip.game_id }}">
+                                        <input type="hidden" name="game_id" value="{{ game_skip['game_id'] }}">
                                         <input type="hidden" name="title" value="{{ item.title }}">
                                         <input type="hidden" name="indexer" value="{{ item.indexer }}">
                                         <input type="hidden" name="magnet_url" value="{{ item.magnet_url or '' }}">

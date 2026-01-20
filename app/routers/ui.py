@@ -308,6 +308,17 @@ async def updates_list(request: Request, session: Session = Depends(get_session)
     )
 
 
+@router.get("/activity-log", response_class=HTMLResponse)
+async def activity_log(request: Request, session: Session = Depends(get_session)):
+    """HTMX partial: Returns updated activity log."""
+    logs = session.exec(select(ScanLog).order_by(ScanLog.started_at.desc()).limit(5)).all()
+    
+    return templates.TemplateResponse(
+        "partials/activity_log.html",
+        {"request": request, "logs": logs}
+    )
+
+
 # ============================================
 # Release Actions
 # ============================================
