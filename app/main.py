@@ -10,11 +10,13 @@ from contextlib import asynccontextmanager
 from typing import Optional
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.config import get_settings
-from app.database import create_db_and_tables
+from sqlmodel import Session, select
+from app.database import create_db_and_tables, engine
+from app.models import AppSetting
 from app.services.manager import run_scan_cycle
 from app.routers import ui
+from app.scheduler import scheduler
 
 # Configure logging
 logging.basicConfig(
@@ -27,11 +29,35 @@ logger = logging.getLogger("repackarr")
 # Load settings
 settings = get_settings()
 
-# Initialize scheduler
-scheduler = AsyncIOScheduler()
-
 # Security - auto mode allows optional credentials
 security = HTTPBasic(auto_error=False)
+
+
+def load_settings_from_db():
+    """Load runtime settings from database and update global config."""
+    try:
+        with Session(engine) as session:
+            db_settings = session.exec(select(AppSetting)).all()
+            for s in db_settings:
+                if hasattr(settings, s.key):
+                    # Convert string value to correct type
+                    target_type = type(getattr(settings, s.key))
+                    try:
+                        if target_type == int:
+                            val = int(s.value)
+                        elif target_type == bool:
+                            val = s.value.lower() == "true"
+                        elif target_type == list:
+                            val = s.value.split(",")
+                        else:
+                            val = s.value
+                        
+                        setattr(settings, s.key, val)
+                        logger.debug(f"Loaded setting {s.key}={val} from DB")
+                    except ValueError:
+                        logger.error(f"Failed to convert setting {s.key} value '{s.value}' to {target_type}")
+    except Exception as e:
+        logger.error(f"Failed to load settings from DB: {e}")
 
 
 async def verify_credentials(
@@ -85,6 +111,9 @@ async def lifespan(app: FastAPI):
     # Initialize database
     create_db_and_tables()
     logger.info("Database initialized")
+    
+    # Load dynamic settings
+    load_settings_from_db()
     
     # Configure and start scheduler
     scheduler.add_job(

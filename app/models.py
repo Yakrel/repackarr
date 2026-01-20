@@ -81,3 +81,26 @@ class Release(ReleaseBase, table=True):
     def download_link(self) -> Optional[str]:
         """Get best available download link."""
         return self.info_url or self.magnet_url
+
+
+class AppSetting(SQLModel, table=True):
+    """
+    Key-value storage for application runtime settings.
+    Overrides environment variables when present.
+    """
+    key: str = Field(primary_key=True, description="Setting key (e.g., SEARCH_INTERVAL)")
+    value: str = Field(description="Setting value as string")
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ScanLog(SQLModel, table=True):
+    """
+    History of scan operations.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    started_at: datetime = Field(default_factory=datetime.utcnow)
+    duration_seconds: float = Field(default=0.0)
+    games_processed: int = Field(default=0)
+    updates_found: int = Field(default=0)
+    status: str = Field(default="success")  # success, failed
+    details: Optional[str] = Field(default=None, description="JSON details or error message")

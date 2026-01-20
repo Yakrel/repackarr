@@ -37,61 +37,46 @@ Unlike traditional *arr apps, Repackarr provides a **"Dashboard of Opportunities
 
 5. Navigate to Settings page to test your connections
 
-### Required Settings
+### Initial Configuration via .env
 
-Edit `.env` file with your values:
+While many settings can be changed in the UI, initial connection details and authentication are set in `.env`:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `QBIT_HOST` | qBittorrent WebUI URL | `http://192.168.1.100:8080` |
 | `QBIT_USERNAME` | qBittorrent username | `admin` |
 | `QBIT_PASSWORD` | qBittorrent password | `your_password` |
-| `PROWLARR_URL` | Prowlarr instance URL | `http://192.168.1.100:9696` |
-| `PROWLARR_API_KEY` | Prowlarr API key (Settings → General) | `abc123...` |
-
-### Optional Settings
-
-All settings have sensible defaults. Configure in `.env` if needed:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `QBIT_CATEGORY` | qBittorrent category to monitor | `games` |
-| `CRON_INTERVAL_MINUTES` | Scan frequency (minutes) | `60` |
-| `PLATFORM_FILTER` | Allowed platforms | `Windows,Linux` |
-| `IGNORED_KEYWORDS` | Excluded keywords | `OST,Soundtrack,Wallpaper,Update Only,Crack Only` |
-| `AUTH_USERNAME` | Dashboard auth username | `None` (disabled) |
-| `AUTH_PASSWORD` | Dashboard auth password | `None` (disabled) |
-| `IGDB_CLIENT_ID` | IGDB API client ID (for game covers) | `None` (disabled) |
-| `IGDB_CLIENT_SECRET` | IGDB API client secret (for game covers) | `None` (disabled) |
-| `TZ` | Timezone | `UTC` |
+| `AUTH_USERNAME` | Dashboard auth username | `admin` (Optional) |
+| `AUTH_PASSWORD` | Dashboard auth password | `secret` (Optional) |
+| `QBIT_CATEGORY` | qBittorrent category | `games` |
 
 ## 📋 Features
 
-- **Dashboard**: View all available updates at a glance with live statistics
-- **Library Management**: Track games from qBittorrent with monitoring controls
-- **Smart Detection**: Automatically strips release group tags (CODEX, NECROS, etc.) for cleaner game titles
-- **Auto-Refresh**: Real-time statistics updates without page refresh (10s polling)
-- **Settings Page**: Test connections and view configuration
-- **Game Covers**: Optional IGDB integration for game artwork
-- **Flexible Filtering**: Platform and keyword filtering for targeted results
+- **Dashboard**: View all available updates with live statistics and **Activity Logs**.
+- **Dynamic Settings**: Change Prowlarr URL, API keys, Scan Intervals, and filters directly from the UI without restarting.
+- **Library Management**: Track games from qBittorrent with monitoring controls.
+- **Smart Detection**: Automatically strips release group tags (CODEX, NECROS, etc.) for cleaner game titles.
+- **Improved Game Matching**: Advanced IGDB integration to accurately find covers for main games (ignoring DLCs/VR versions if needed).
+- **Auto-Refresh**: Real-time statistics updates via HTMX.
+- **Scan History**: View detailed logs of previous scans, including how many updates were found and any errors encountered.
+- **Flexible Filtering**: Platform and keyword filtering for targeted results.
 
 ## 🎯 How It Works
 
-1. **Sync**: Repackarr scans your qBittorrent for games in the specified category
-2. **Detect**: Game titles are intelligently parsed and cleaned (e.g., "Green Hell-NECROS" → "Green Hell")
-3. **Monitor**: Games are added to your library and monitored for updates
-4. **Search**: Prowlarr is queried periodically for newer releases
-5. **Review**: You review and manually decide which updates to download
+1. **Sync**: Repackarr scans your qBittorrent for games in the specified category.
+2. **Detect**: Game titles are parsed and cleaned (e.g., "Green Hell-NECROS" → "Green Hell").
+3. **Monitor**: Games are added to your library. You can "Monitor" or "Ignore" specific titles.
+4. **Search**: Prowlarr is queried periodically (configurable) for newer releases based on your platform/keyword filters.
+5. **Review**: You review found releases on the Dashboard and manually decide which to download.
 
-## 🔧 Settings
+## 🔧 Settings & Configuration
 
-Access the Settings page from the navigation menu to:
-- Test qBittorrent connection
-- Test Prowlarr connection  
-- View current configuration
-- Check IGDB integration status
+Repackarr uses a hybrid configuration approach:
 
-All configuration is done via environment variables. Changes require a container restart.
+1.  **Environment Variables (.env)**: Used for sensitive credentials (qBittorrent login, Web Auth) and initial bootstrap.
+2.  **UI Settings (Database)**: Used for runtime configuration (Prowlarr details, Intervals, IGDB keys).
+
+**Note:** Settings changed in the UI are saved to the database and will **override** the values in your `.env` file. This allows you to tweak scan intervals or API keys instantly without restarting the container.
 
 ## 📄 License
 GPLv2 License - Copyright (c) 2026 **Berkay Yetgin**.

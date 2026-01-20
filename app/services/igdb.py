@@ -91,7 +91,8 @@ class IGDBService:
             }
 
             # Search for game with cover data
-            query = f'fields name, cover.image_id; search "{game_name}"; limit 1;'
+            # Category: 0 (Main Game), 8 (Remake), 9 (Remaster)
+            query = f'fields name, cover.image_id, category; search "{game_name}"; where category = (0, 8, 9); limit 5;'
             
             resp = await self.client.post(
                 f"{self.api_url}/games", 
@@ -105,14 +106,30 @@ class IGDBService:
                 logger.debug(f"No IGDB results for: {game_name}")
                 return None
             
-            game_data = results[0]
-            cover_info = game_data.get("cover")
+            # Find best match
+            best_match = None
+            game_name_clean = game_name.lower().strip()
+            
+            for game in results:
+                # 1. Exact match preference
+                if game.get("name", "").lower().strip() == game_name_clean:
+                    best_match = game
+                    break
+                
+                # 2. Starts with match (fallback)
+                if not best_match and game.get("name", "").lower().strip().startswith(game_name_clean):
+                    best_match = game
+            
+            # Fallback to first result if no better match found
+            target_game = best_match or results[0]
+            
+            cover_info = target_game.get("cover")
             
             if cover_info and "image_id" in cover_info:
                 img_id = cover_info["image_id"]
                 # Use t_cover_big for 264x374 resolution
                 url = f"https://images.igdb.com/igdb/image/upload/t_cover_big/{img_id}.jpg"
-                logger.info(f"Found cover for {game_name}")
+                logger.info(f"Found cover for {game_name} -> {target_game.get('name')}")
                 return url
             
             return None

@@ -24,18 +24,29 @@ class ProwlarrService:
         self.sem = asyncio.Semaphore(3)  # Max 3 concurrent requests
         self.client = httpx.AsyncClient(timeout=60.0, verify=False)
 
-    async def search_for_game(self, game_id: int) -> None:
+    async def search_for_game(self, game_id: int) -> dict:
         """
         Search Prowlarr for updates for a specific game.
         
         Args:
             game_id: Database ID of the game to search for
+            
+        Returns:
+            Dictionary with scan statistics
         """
+        stats = {
+            "game_id": game_id,
+            "total_found": 0,
+            "added": 0,
+            "error": None
+        }
+
         async with self.sem:
             with Session(engine) as session:
                 game = session.get(Game, game_id)
                 if not game:
-                    return
+                    stats["error"] = "Game not found"
+                    return stats
 
                 try:
                     params = {
@@ -53,14 +64,18 @@ class ProwlarrService:
                     results = resp.json()
                 except httpx.HTTPStatusError as e:
                     logger.error(f"Prowlarr API error for {game.title}: {e.response.status_code}")
-                    return
+                    stats["error"] = f"HTTP {e.response.status_code}"
+                    return stats
                 except httpx.RequestError as e:
                     logger.error(f"Prowlarr connection error for {game.title}: {e}")
-                    return
+                    stats["error"] = "Connection Error"
+                    return stats
                 except Exception as e:
                     logger.error(f"Prowlarr search failed for {game.title}: {e}")
-                    return
+                    stats["error"] = str(e)
+                    return stats
 
+                stats["total_found"] = len(results)
                 new_releases_count = 0
                 
                 for item in results:
@@ -69,6 +84,8 @@ class ProwlarrService:
                         session.add(release)
                         new_releases_count += 1
                 
+                stats["added"] = new_releases_count
+                
                 if new_releases_count > 0:
                     logger.info(f"Found {new_releases_count} new release(s) for {game.title}")
                 
@@ -76,6 +93,8 @@ class ProwlarrService:
                 game.last_scanned_at = datetime.utcnow()
                 session.add(game)
                 session.commit()
+                
+        return stats
 
     def _process_search_result(self, item: dict, game: Game, session: Session) -> Release | None:
         """

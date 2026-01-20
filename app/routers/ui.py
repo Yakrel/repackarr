@@ -8,10 +8,11 @@ from fastapi.templating import Jinja2Templates
 from fastapi import Request
 from sqlmodel import Session, select, func
 from app.database import get_session
-from app.models import Game, Release, GameStatus
+from app.models import Game, Release, GameStatus, AppSetting, ScanLog
 from app.services.manager import run_scan_cycle, run_sync_library, run_search_updates
 from app.services.prowlarr import ProwlarrService
 from app.config import get_settings
+from app.scheduler import scheduler
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -68,12 +69,16 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
     updates = get_updates_data(session)
     stats = get_dashboard_stats(session)
     
+    # Get recent logs
+    logs = session.exec(select(ScanLog).order_by(ScanLog.started_at.desc()).limit(5)).all()
+    
     return templates.TemplateResponse(
         "dashboard.html", 
         {
             "request": request, 
             "updates": updates, 
             "stats": stats,
+            "logs": logs,
             "page": "dashboard",
             "settings": settings
         }
@@ -107,6 +112,74 @@ async def settings_page(request: Request, session: Session = Depends(get_session
             "request": request, 
             "page": "settings",
             "settings": settings
+        }
+    )
+
+@router.post("/settings/save", response_class=HTMLResponse)
+async def save_settings(
+    request: Request,
+    CRON_INTERVAL_MINUTES: int = Form(...),
+    PROWLARR_URL: str = Form(...),
+    PROWLARR_API_KEY: str = Form(...),
+    IGDB_CLIENT_ID: str = Form(""),
+    IGDB_CLIENT_SECRET: str = Form(""),
+    PLATFORM_FILTER: str = Form(...),
+    IGNORED_KEYWORDS: str = Form(""),
+    session: Session = Depends(get_session)
+):
+    """Save settings to database and update runtime config."""
+    form_data = {
+        "CRON_INTERVAL_MINUTES": str(CRON_INTERVAL_MINUTES),
+        "PROWLARR_URL": PROWLARR_URL,
+        "PROWLARR_API_KEY": PROWLARR_API_KEY,
+        "IGDB_CLIENT_ID": IGDB_CLIENT_ID,
+        "IGDB_CLIENT_SECRET": IGDB_CLIENT_SECRET,
+        "PLATFORM_FILTER": PLATFORM_FILTER,
+        "IGNORED_KEYWORDS": IGNORED_KEYWORDS
+    }
+    
+    # Update DB
+    for key, value in form_data.items():
+        setting = session.get(AppSetting, key)
+        if not setting:
+            setting = AppSetting(key=key, value=value)
+        else:
+            setting.value = value
+            setting.updated_at = datetime.utcnow()
+        session.add(setting)
+    
+    session.commit()
+    
+    # Update Runtime Config
+    old_interval = settings.CRON_INTERVAL_MINUTES
+    
+    settings.CRON_INTERVAL_MINUTES = CRON_INTERVAL_MINUTES
+    settings.PROWLARR_URL = PROWLARR_URL
+    settings.PROWLARR_API_KEY = PROWLARR_API_KEY
+    settings.IGDB_CLIENT_ID = IGDB_CLIENT_ID or None
+    settings.IGDB_CLIENT_SECRET = IGDB_CLIENT_SECRET or None
+    settings.PLATFORM_FILTER = PLATFORM_FILTER
+    settings.IGNORED_KEYWORDS = IGNORED_KEYWORDS
+    
+    # Reschedule if interval changed
+    if old_interval != CRON_INTERVAL_MINUTES:
+        try:
+            scheduler.reschedule_job(
+                'scan_job', 
+                trigger='interval', 
+                minutes=CRON_INTERVAL_MINUTES
+            )
+        except Exception as e:
+            # Job might not exist yet or error
+            pass
+            
+    return templates.TemplateResponse(
+        "settings.html", 
+        {
+            "request": request, 
+            "page": "settings", 
+            "settings": settings,
+            "success": True
         }
     )
 
