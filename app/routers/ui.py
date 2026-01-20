@@ -1,6 +1,7 @@
 """
 UI Router - Web interface endpoints for Repackarr.
 """
+import json
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Form, HTTPException
 from fastapi.responses import HTMLResponse
@@ -59,6 +60,71 @@ def get_updates_data(session: Session) -> list:
     return list(grouped_updates.values())
 
 
+from app.utils import extract_version
+
+@router.post("/release/force-add", response_class=HTMLResponse)
+async def force_add_release(
+    game_id: int = Form(...),
+    title: str = Form(...),
+    indexer: str = Form(...),
+    magnet_url: str = Form(None),
+    info_url: str = Form(None),
+    size: str = Form(None),
+    date: str = Form(None),
+    session: Session = Depends(get_session)
+):
+    """Force add a release from the skipped list."""
+    game = session.get(Game, game_id)
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+        
+    # Check if already exists to prevent duplicates (though user forced it, maybe we should allow? 
+    # But unique constraint might fail. Let's check.)
+    existing = session.exec(
+        select(Release).where(
+            Release.raw_title == title,
+            Release.game_id == game_id
+        )
+    ).first()
+    
+    if existing:
+        return HTMLResponse(
+            '<span class="text-amber-400 text-xs">Already exists</span>'
+        )
+        
+    # Parse date
+    upload_date = datetime.utcnow()
+    if date and date != "N/A":
+        try:
+            # Date format from log is YYYY-MM-DD
+            upload_date = datetime.strptime(date, '%Y-%m-%d')
+        except:
+            pass
+            
+    # Extract version
+    parsed_version = extract_version(title)
+    
+    release = Release(
+        game_id=game_id,
+        raw_title=title,
+        parsed_version=parsed_version,
+        upload_date=upload_date,
+        indexer=indexer,
+        magnet_url=magnet_url,
+        info_url=info_url,
+        size=size,
+        is_ignored=False
+    )
+    
+    session.add(release)
+    session.commit()
+    
+    return HTMLResponse(
+        '<span class="text-emerald-400 text-xs font-bold">✓ Added</span>',
+        headers={"HX-Trigger": "updates-changed, stats-changed"}
+    )
+
+
 # ============================================
 # Page Routes
 # ============================================
@@ -81,6 +147,30 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
             "logs": logs,
             "page": "dashboard",
             "settings": settings
+        }
+    )
+
+
+@router.get("/log/{id}/details", response_class=HTMLResponse)
+async def get_log_details(id: int, request: Request, session: Session = Depends(get_session)):
+    """HTMX partial: Returns details for a specific log."""
+    log = session.get(ScanLog, id)
+    if not log:
+        return HTMLResponse("Log not found", status_code=404)
+        
+    details = {}
+    if log.details:
+        try:
+            details = json.loads(log.details)
+        except:
+            details = {"error": "Could not parse details"}
+            
+    return templates.TemplateResponse(
+        "partials/log_details_modal.html",
+        {
+            "request": request,
+            "log": log,
+            "details": details
         }
     )
 
@@ -254,11 +344,16 @@ async def confirm_update(id: int, session: Session = Depends(get_session)):
         game.current_version = release.parsed_version
     session.add(game)
     
-    # Delete all releases for this game
-    releases = session.exec(
-        select(Release).where(Release.game_id == game.id)
+    # Delete the confirmed release and any older releases
+    # Keep releases that are NEWER than the one we just confirmed
+    releases_to_delete = session.exec(
+        select(Release).where(
+            Release.game_id == game.id,
+            Release.upload_date <= release.upload_date
+        )
     ).all()
-    for r in releases:
+    
+    for r in releases_to_delete:
         session.delete(r)
         
     session.commit()

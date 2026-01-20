@@ -67,13 +67,25 @@ async def run_search_updates() -> int:
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
         # Process results
+        all_skipped = []
+        
         for i, res in enumerate(results):
             game_title = monitored_games[i].title
             if isinstance(res, dict):
                 total_found += res.get("total_found", 0)
                 total_added += res.get("added", 0)
+                
                 if res.get("error"):
                     scan_details.append(f"{game_title}: {res['error']}")
+                
+                # Collect skipped items if any
+                if res.get("skipped"):
+                    all_skipped.append({
+                        "game": game_title,
+                        "game_id": monitored_games[i].id,
+                        "items": res["skipped"]
+                    })
+                    
             elif isinstance(res, Exception):
                 scan_details.append(f"{game_title}: Exception {str(res)}")
             
@@ -96,7 +108,8 @@ async def run_search_updates() -> int:
                 status="success" if not scan_details else "partial_success",
                 details=json.dumps({
                     "total_results_found": total_found,
-                    "errors": scan_details[:10]  # Limit error details
+                    "errors": scan_details[:10],  # Limit error details
+                    "skipped_activity": all_skipped
                 })
             )
             session.add(log_entry)

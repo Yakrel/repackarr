@@ -1,7 +1,7 @@
 import httpx
 import logging
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlmodel import Session, select
 from app.config import get_settings
 from app.database import engine
@@ -38,6 +38,7 @@ class ProwlarrService:
             "game_id": game_id,
             "total_found": 0,
             "added": 0,
+            "skipped": [],
             "error": None
         }
 
@@ -79,10 +80,12 @@ class ProwlarrService:
                 new_releases_count = 0
                 
                 for item in results:
-                    release = self._process_search_result(item, game, session)
+                    release, skipped_info = self._process_search_result(item, game, session)
                     if release:
                         session.add(release)
                         new_releases_count += 1
+                    elif skipped_info:
+                        stats["skipped"].append(skipped_info)
                 
                 stats["added"] = new_releases_count
                 
@@ -96,7 +99,7 @@ class ProwlarrService:
                 
         return stats
 
-    def _process_search_result(self, item: dict, game: Game, session: Session) -> Release | None:
+    def _process_search_result(self, item: dict, game: Game, session: Session) -> tuple[Release | None, dict | None]:
         """
         Process a single search result and return a Release if it's a valid upgrade.
         
@@ -106,7 +109,7 @@ class ProwlarrService:
             session: Database session
             
         Returns:
-            Release object if valid, None otherwise
+            Tuple (Release | None, SkippedInfo | None)
         """
         title = item.get('title', '')
         indexer = item.get('indexer', 'Unknown')
@@ -114,30 +117,55 @@ class ProwlarrService:
         size = item.get('size', 0)
         
         title_lower = title.lower()
+        upload_date = self._parse_date(item)
         
+        # Check if this release is newer than current installed version
+        # If it is newer, we want to log why we skip it if we do skip it.
+        is_newer_date = False
+        if upload_date:
+            # Simple date check against current version date
+            if upload_date > game.current_version_date.replace(tzinfo=None):
+                is_newer_date = True
+        
+        # Helper to create skip info
+        def make_skip(reason_text: str):
+            # Only return skip info if it was newer by date, as requested
+            if is_newer_date:
+                return None, {
+                    "title": title,
+                    "date": upload_date.strftime('%Y-%m-%d') if upload_date else "N/A",
+                    "reason": reason_text,
+                    "indexer": indexer,
+                    "magnet_url": item.get('magnetUrl') or item.get('downloadUrl'),
+                    "info_url": info_url,
+                    "size": format_size(size) if size else "?"
+                }
+            return None, None
+
         # 1. Strict Title Check: Ensure all words from game title are present
         game_words = [w.strip().lower() for w in game.title.split() if len(w.strip()) > 2]
         if not all(w in title_lower for w in game_words):
-            return None
+            # If title doesn't match well, it might be irrelevant noise.
+            # But if it's "newer", user might want to know.
+            # However, weak title matches are usually just wrong games.
+            # We'll log it if it's newer, but maybe mark as "Title Mismatch"
+            return make_skip("Title mismatch")
 
         # 2. Platform Filter: Exclude console/mobile releases
         excluded_platforms = ["ps5", "ps4", "ps3", "xbox", "switch", "macos", "android", "mac", "ios"]
         if any(p in title_lower for p in excluded_platforms):
-            return None
+            return make_skip("Platform excluded")
 
         # 3. Keyword Filter: Exclude unwanted content types
         if any(k in title_lower for k in settings.ignored_keywords_list):
-            return None
+            return make_skip("Ignored keyword match")
             
         # 4. Extract Remote Version
         remote_version = extract_version(title)
         is_upgrade = False
         reason = "date"
         
-        # 5. Parse Upload Date
-        upload_date = self._parse_date(item)
-        
-        # 6. Determine if this is an upgrade
+        # 5. Determine if this is an upgrade
         if game.current_version and remote_version:
             comparison = compare_versions(game.current_version, remote_version)
             if comparison == 1:
@@ -145,20 +173,25 @@ class ProwlarrService:
                 reason = f"version (v{remote_version} > v{game.current_version})"
             elif comparison in (-1, 0):
                 # Same or older version, skip
-                return None
+                return make_skip(f"Version not newer (v{remote_version} <= v{game.current_version})")
             else:
                 # Comparison failed, fallback to date
-                if upload_date and upload_date > game.current_version_date.replace(tzinfo=None):
+                if is_newer_date:
                     is_upgrade = True
+                else:
+                    return make_skip("Date not newer")
         else:
             # Fallback to date if version is missing
-            if upload_date and upload_date > game.current_version_date.replace(tzinfo=None):
+            if is_newer_date:
                 is_upgrade = True
+            else:
+                 return make_skip("Date not newer")
 
         if not is_upgrade:
-            return None
+            # Should be covered above, but just in case
+            return make_skip("Not an upgrade")
 
-        # 7. Check for Duplicates
+        # 6. Check for Duplicates
         existing = session.exec(
             select(Release).where(
                 Release.raw_title == title,
@@ -167,9 +200,9 @@ class ProwlarrService:
         ).first()
         
         if existing:
-            return None
+            return make_skip("Already exists in database")
 
-        # 8. Create and return release
+        # 7. Create and return release
         logger.info(f"New release for {game.title}: {title} [{reason}]")
         
         return Release(
@@ -181,7 +214,7 @@ class ProwlarrService:
             magnet_url=item.get('magnetUrl') or item.get('downloadUrl'),
             info_url=info_url,
             size=format_size(size) if size else "?",
-        )
+        ), None
     
     def _parse_date(self, item: dict) -> datetime | None:
         """
@@ -191,17 +224,18 @@ class ProwlarrService:
             item: Search result dict
             
         Returns:
-            Parsed datetime or None
+            Parsed datetime (UTC Naive) or None
         """
         added_str = item.get('publishDate') or item.get('added')
         if not added_str:
             return None
             
         try:
+            # Parse ISO format
             upload_date = datetime.fromisoformat(added_str.replace("Z", "+00:00"))
-            # Convert to naive datetime for consistency
-            if upload_date.tzinfo:
-                upload_date = upload_date.astimezone(None).replace(tzinfo=None)
+            
+            # Convert to UTC explicitly, then remove tzinfo to make it naive (for DB)
+            upload_date = upload_date.astimezone(timezone.utc).replace(tzinfo=None)
             
             # Prevent future dates (some trackers fake dates)
             now = datetime.utcnow()

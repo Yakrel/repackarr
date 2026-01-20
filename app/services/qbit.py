@@ -118,8 +118,8 @@ class QBitService:
         if ts <= 0:
             return False
         
-        # Use naive datetime for consistency with database
-        torrent_date = datetime.fromtimestamp(ts)
+        # Use UTC datetime for consistency with Prowlarr/Database
+        torrent_date = datetime.utcfromtimestamp(ts)
         
         raw_name = torrent.get('name', '')
         if not raw_name:
