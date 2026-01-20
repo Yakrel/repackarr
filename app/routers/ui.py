@@ -2,9 +2,10 @@
 UI Router - Web interface endpoints for Repackarr.
 """
 import json
+import asyncio
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Form, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi import Request
 from sqlmodel import Session, select, func
@@ -14,6 +15,7 @@ from app.services.manager import run_scan_cycle, run_sync_library, run_search_up
 from app.services.prowlarr import ProwlarrService
 from app.config import get_settings
 from app.scheduler import scheduler
+from app.progress import progress_manager
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -471,15 +473,59 @@ async def trigger_scan():
 @router.post("/sync-library", response_class=HTMLResponse)
 async def trigger_sync_library():
     """Sync library from qBittorrent."""
-    await run_sync_library()
+    try:
+        await run_sync_library()
+    finally:
+        await progress_manager.complete()
     return HTMLResponse("", headers={"HX-Trigger": "updates-changed, stats-changed"})
 
 
 @router.post("/check-updates", response_class=HTMLResponse)
 async def trigger_check_updates():
     """Check Prowlarr for updates."""
-    await run_search_updates()
+    try:
+        await run_search_updates()
+    finally:
+        await progress_manager.complete()
     return HTMLResponse("", headers={"HX-Trigger": "updates-changed, stats-changed"})
+
+
+@router.get("/scan-progress")
+async def scan_progress_sse():
+    """SSE endpoint for real-time scan progress updates."""
+    async def event_generator():
+        queue = await progress_manager.subscribe()
+        try:
+            while True:
+                try:
+                    # Wait for progress update with timeout (60s keepalive interval)
+                    data = await asyncio.wait_for(queue.get(), timeout=60.0)
+                    yield f"data: {json.dumps(data)}\n\n"
+                    
+                    # If scan completed, send one more update and stop
+                    if not data.get("is_scanning", True):
+                        break
+                except asyncio.TimeoutError:
+                    # Send keepalive comment to keep connection alive
+                    yield f": keepalive\n\n"
+        finally:
+            await progress_manager.unsubscribe(queue)
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+
+@router.get("/scan-progress/status")
+async def scan_progress_status():
+    """Get current scan progress status (polling fallback)."""
+    return progress_manager.progress.to_dict()
 
 
 # ============================================

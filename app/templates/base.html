@@ -187,6 +187,30 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Scan Progress Bar -->
+        <div id="scan-progress-bar" class="hidden">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2 text-sm text-dark-300">
+                        <svg class="animate-spin h-4 w-4 text-brand-400" viewBox="0 0 24 24" fill="none">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span id="scan-phase" class="font-medium text-brand-300">Scanning...</span>
+                    </div>
+                    <div class="flex-1">
+                        <div class="h-2 bg-dark-700 rounded-full overflow-hidden">
+                            <div id="scan-progress-fill" class="h-full bg-gradient-to-r from-brand-500 to-emerald-500 transition-all duration-300 ease-out" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm">
+                        <span id="scan-percent" class="font-bold text-brand-400">0%</span>
+                        <span id="scan-current-item" class="text-dark-400 truncate max-w-[200px]"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
     </nav>
 
     <!-- Mobile Navigation -->
@@ -253,6 +277,107 @@
                 showToast('Operation completed', 'success');
             }
         });
+        
+        // Scan Progress Bar functionality
+        (function() {
+            const progressBar = document.getElementById('scan-progress-bar');
+            const progressFill = document.getElementById('scan-progress-fill');
+            const phaseText = document.getElementById('scan-phase');
+            const percentText = document.getElementById('scan-percent');
+            const currentItemText = document.getElementById('scan-current-item');
+            
+            let eventSource = null;
+            let isScanning = false;
+            
+            function updateProgressUI(data) {
+                if (data.is_scanning) {
+                    progressBar.classList.remove('hidden');
+                    isScanning = true;
+                    
+                    // Update phase text
+                    const phaseLabels = {
+                        'sync': 'Syncing Library',
+                        'search': 'Searching Updates'
+                    };
+                    phaseText.textContent = phaseLabels[data.phase] || 'Processing...';
+                    
+                    // Update progress bar
+                    const percent = data.percent || 0;
+                    progressFill.style.width = percent + '%';
+                    percentText.textContent = percent + '%';
+                    
+                    // Update current item
+                    if (data.current_item) {
+                        currentItemText.textContent = data.current_item;
+                    } else {
+                        currentItemText.textContent = '';
+                    }
+                } else {
+                    if (isScanning) {
+                        // Scan just completed - show 100% briefly then hide
+                        progressFill.style.width = '100%';
+                        percentText.textContent = '100%';
+                        phaseText.textContent = 'Complete!';
+                        currentItemText.textContent = '';
+                        
+                        setTimeout(() => {
+                            progressBar.classList.add('hidden');
+                            progressFill.style.width = '0%';
+                        }, 1500);
+                    } else {
+                        progressBar.classList.add('hidden');
+                    }
+                    isScanning = false;
+                }
+            }
+            
+            function connectSSE() {
+                if (eventSource) {
+                    eventSource.close();
+                }
+                
+                eventSource = new EventSource('/scan-progress');
+                
+                eventSource.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        updateProgressUI(data);
+                    } catch (e) {
+                        console.error('Failed to parse progress data:', e);
+                    }
+                };
+                
+                eventSource.onerror = function(err) {
+                    console.log('SSE connection closed, will retry...');
+                    eventSource.close();
+                    // Retry connection after a delay
+                    setTimeout(connectSSE, 3000);
+                };
+            }
+            
+            // Start listening when any scan button is clicked
+            document.body.addEventListener('htmx:beforeRequest', function(evt) {
+                const target = evt.detail.elt;
+                if (target && (
+                    target.getAttribute('hx-post') === '/scan-now' ||
+                    target.getAttribute('hx-post') === '/sync-library' ||
+                    target.getAttribute('hx-post') === '/check-updates'
+                )) {
+                    connectSSE();
+                }
+            });
+            
+            // Check initial status on page load
+            fetch('/scan-progress/status')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.is_scanning) {
+                        updateProgressUI(data);
+                        connectSSE();
+                    }
+                })
+                .catch(() => {});
+        })();
     </script>
 </body>
 </html>

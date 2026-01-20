@@ -11,6 +11,7 @@ from app.database import engine
 from app.services.qbit import QBitService
 from app.services.prowlarr import ProwlarrService
 from app.models import Game, GameStatus, ScanLog
+from app.progress import progress_manager
 
 logger = logging.getLogger("repackarr")
 
@@ -27,8 +28,13 @@ async def run_sync_library() -> int:
     synced = 0
     
     try:
+        await progress_manager.start_scan("sync", 1)
+        await progress_manager.update(0, "Connecting to qBittorrent...")
+        
         with Session(engine) as session:
             synced = await qbit.sync_games(session)
+            
+        await progress_manager.update(1, "Library sync complete")
     except Exception as e:
         logger.error(f"Library sync failed: {e}")
     finally:
@@ -62,32 +68,37 @@ async def run_search_updates() -> int:
         scanned = len(monitored_games)
         logger.info(f"Scanning {scanned} monitored game(s)...")
         
-        # Run searches concurrently (throttled by semaphore in service)
-        tasks = [prowlarr.search_for_game(game.id) for game in monitored_games]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Start progress tracking
+        await progress_manager.start_scan("search", scanned)
         
         # Process results
         all_skipped = []
         
-        for i, res in enumerate(results):
-            game_title = monitored_games[i].title
-            if isinstance(res, dict):
-                total_found += res.get("total_found", 0)
-                total_added += res.get("added", 0)
+        # Search games one by one to track progress (still using semaphore for concurrent requests)
+        for i, game in enumerate(monitored_games):
+            await progress_manager.update(i, f"Searching: {game.title}")
+            
+            try:
+                res = await prowlarr.search_for_game(game.id)
                 
-                if res.get("error"):
-                    scan_details.append(f"{game_title}: {res['error']}")
-                
-                # Collect skipped items if any
-                if res.get("skipped"):
-                    all_skipped.append({
-                        "game": game_title,
-                        "game_id": monitored_games[i].id,
-                        "items": res["skipped"]
-                    })
+                if isinstance(res, dict):
+                    total_found += res.get("total_found", 0)
+                    total_added += res.get("added", 0)
                     
-            elif isinstance(res, Exception):
-                scan_details.append(f"{game_title}: Exception {str(res)}")
+                    if res.get("error"):
+                        scan_details.append(f"{game.title}: {res['error']}")
+                    
+                    # Collect skipped items if any
+                    if res.get("skipped"):
+                        all_skipped.append({
+                            "game": game.title,
+                            "game_id": game.id,
+                            "items": res["skipped"]
+                        })
+            except Exception as e:
+                scan_details.append(f"{game.title}: Exception {str(e)}")
+        
+        await progress_manager.update(scanned, "Search complete")
             
     except Exception as e:
         logger.error(f"Update search failed: {e}")
@@ -131,11 +142,15 @@ async def run_scan_cycle() -> None:
     logger.info("=" * 50)
     logger.info("Starting full scan cycle...")
     
-    # Step 1: Sync from qBittorrent
-    synced = await run_sync_library()
-        
-    # Step 2: Search Prowlarr for updates
-    scanned = await run_search_updates()
+    try:
+        # Step 1: Sync from qBittorrent
+        synced = await run_sync_library()
+            
+        # Step 2: Search Prowlarr for updates
+        scanned = await run_search_updates()
+    finally:
+        # Ensure progress is marked complete
+        await progress_manager.complete()
     
     duration = (datetime.utcnow() - start_time).total_seconds()
     logger.info(f"Scan cycle completed in {duration:.1f}s")
