@@ -18,7 +18,7 @@ class IGDBService:
     _token_expiry: datetime = datetime.min
 
     def __init__(self):
-        self.client = httpx.AsyncClient(timeout=10.0)
+        self.client = httpx.AsyncClient(timeout=10.0, verify=False)
         self.auth_url = "https://id.twitch.tv/oauth2/token"
         self.api_url = "https://api.igdb.com/v4"
 
@@ -91,8 +91,8 @@ class IGDBService:
             }
 
             # Search for game with cover data
-            # Category: 0 (Main Game), 8 (Remake), 9 (Remaster)
-            query = f'fields name, cover.image_id, category; search "{game_name}"; where category = (0, 8, 9); limit 5;'
+            # Removed category filter to allow Bundles (3), Expansions, etc.
+            query = f'fields name, cover.image_id, category; search "{game_name}"; limit 5;'
             
             resp = await self.client.post(
                 f"{self.api_url}/games", 
