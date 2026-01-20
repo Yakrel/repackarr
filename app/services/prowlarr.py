@@ -69,11 +69,16 @@ class ProwlarrService:
                     return stats
                 except httpx.RequestError as e:
                     logger.error(f"Prowlarr connection error for {game.title}: {e}")
-                    stats["error"] = f"Conn: {str(e)[:40]}"
+                    # Extract meaningful error message
+                    error_msg = str(e) if str(e) else type(e).__name__
+                    if not error_msg or error_msg == "":
+                        error_msg = "Connection failed"
+                    stats["error"] = f"Connection error: {error_msg[:80]}"
                     return stats
                 except Exception as e:
                     logger.error(f"Prowlarr search failed for {game.title}: {e}")
-                    stats["error"] = str(e)
+                    error_msg = str(e) if str(e) else type(e).__name__
+                    stats["error"] = f"Error: {error_msg[:80]}"
                     return stats
 
                 stats["total_found"] = len(results)
