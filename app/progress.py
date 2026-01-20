@@ -51,7 +51,7 @@ class ProgressManager:
     
     async def subscribe(self) -> asyncio.Queue:
         """Subscribe to progress updates. Returns a queue that receives updates."""
-        queue: asyncio.Queue = asyncio.Queue()
+        queue: asyncio.Queue[dict] = asyncio.Queue()
         async with self._lock:
             self._subscribers.append(queue)
         # Send current state immediately

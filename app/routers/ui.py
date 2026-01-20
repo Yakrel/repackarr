@@ -498,15 +498,15 @@ async def scan_progress_sse():
         try:
             while True:
                 try:
-                    # Wait for progress update with timeout
-                    data = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    # Wait for progress update with timeout (60s keepalive interval)
+                    data = await asyncio.wait_for(queue.get(), timeout=60.0)
                     yield f"data: {json.dumps(data)}\n\n"
                     
                     # If scan completed, send one more update and stop
                     if not data.get("is_scanning", True):
                         break
                 except asyncio.TimeoutError:
-                    # Send keepalive
+                    # Send keepalive comment to keep connection alive
                     yield f": keepalive\n\n"
         finally:
             await progress_manager.unsubscribe(queue)
