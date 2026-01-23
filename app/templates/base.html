@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Repackarr</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎮</text></svg>">
+    
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            200: '#c7d2fe',
+                            300: '#a5b4fc',
+                            400: '#818cf8',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            800: '#3730a3',
+                            900: '#312e81',
+                        },
+                        dark: {
+                            50: '#f8fafc',
+                            100: '#f1f5f9',
+                            200: '#e2e8f0',
+                            300: '#cbd5e1',
+                            400: '#94a3b8',
+                            500: '#64748b',
+                            600: '#475569',
+                            700: '#334155',
+                            800: '#1e293b',
+                            850: '#172033',
+                            900: '#0f172a',
+                            950: '#020617',
+                        }
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.2s ease-out',
+                        'slide-up': 'slideUp 0.3s ease-out',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        slideUp: {
+                            '0%': { opacity: '0', transform: 'translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        
+        /* HTMX indicators */
+        .htmx-indicator { display: none; }
+        .htmx-request .htmx-indicator { display: inline-flex; }
+        .htmx-request.htmx-indicator { display: inline-flex; }
+        .htmx-request > svg:not(.htmx-indicator) { display: none; }
+        
+        /* Smooth transitions */
+        .htmx-swapping { opacity: 0; transition: opacity 0.2s ease-out; }
+        .htmx-settling { opacity: 1; transition: opacity 0.2s ease-in; }
+        
+        /* Glass effect */
+        .glass {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        
+        /* Glow effects */
+        .glow-brand { box-shadow: 0 0 20px rgba(99, 102, 241, 0.3); }
+        .glow-success { box-shadow: 0 0 15px rgba(16, 185, 129, 0.2); }
+    </style>
+</head>
+<body class="bg-dark-950 text-dark-100 min-h-screen font-sans antialiased">
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div>
+
+    <!-- Navbar -->
+    <nav class="fixed top-0 left-0 right-0 z-40 glass border-b border-dark-700/50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Logo & Nav Links -->
+                <div class="flex items-center gap-8">
+                    <a href="/" class="flex items-center gap-2 group">
+                        <span class="text-2xl">🎮</span>
+                        <span class="font-bold text-xl tracking-tight">
+                            <span class="text-brand-400 group-hover:text-brand-300 transition">REPACK</span><span class="text-dark-100">ARR</span>
+                        </span>
+                    </a>
+                    
+                    <div class="hidden md:flex items-center gap-1">
+                        <a href="/" class="{% if page == 'dashboard' %}bg-dark-700/50 text-white{% else %}text-dark-300 hover:text-white hover:bg-dark-800/50{% endif %} px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                            </svg>
+                            Dashboard
+                        </a>
+                        <a href="/library" class="{% if page == 'library' %}bg-dark-700/50 text-white{% else %}text-dark-300 hover:text-white hover:bg-dark-800/50{% endif %} px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                            Library
+                        </a>
+                        <a href="/settings" class="{% if page == 'settings' %}bg-dark-700/50 text-white{% else %}text-dark-300 hover:text-white hover:bg-dark-800/50{% endif %} px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            Settings
+                        </a>
+                    </div>
+                </div>
+                
+                <!-- Action Buttons -->
+                <div class="flex items-center gap-2">
+                    <!-- Sync Library Button -->
+                    <button 
+                        hx-post="/sync-library" 
+                        hx-indicator="#sync-spinner" 
+                        hx-swap="none"
+                        class="relative flex items-center gap-2 px-3 py-2 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-600/50 text-sm font-medium transition-all group"
+                        title="Sync library from qBittorrent">
+                        <svg id="sync-spinner" class="animate-spin h-4 w-4 text-brand-400 htmx-indicator" viewBox="0 0 24 24" fill="none">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <svg class="w-4 h-4 text-dark-400 group-hover:text-dark-200 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span class="hidden sm:inline text-dark-300 group-hover:text-white transition">Sync</span>
+                    </button>
+
+                    <!-- Check Updates Button -->
+                    <button 
+                        hx-post="/check-updates" 
+                        hx-indicator="#update-spinner" 
+                        hx-swap="none"
+                        class="relative flex items-center gap-2 px-3 py-2 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-600/50 text-sm font-medium transition-all group"
+                        title="Search Prowlarr for updates">
+                        <svg id="update-spinner" class="animate-spin h-4 w-4 text-brand-400 htmx-indicator" viewBox="0 0 24 24" fill="none">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <svg class="w-4 h-4 text-dark-400 group-hover:text-dark-200 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <span class="hidden sm:inline text-dark-300 group-hover:text-white transition">Search</span>
+                    </button>
+
+                    <!-- Full Scan Button -->
+                    <button 
+                        hx-post="/scan-now" 
+                        hx-indicator="#scan-spinner" 
+                        hx-swap="none"
+                        class="relative flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold transition-all shadow-lg shadow-brand-600/20 hover:shadow-brand-500/30"
+                        title="Full scan: Sync + Search">
+                        <svg id="scan-spinner" class="animate-spin h-4 w-4 htmx-indicator" viewBox="0 0 24 24" fill="none">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        <span>Full Scan</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Scan Progress Bar -->
+        <div id="scan-progress-bar" class="hidden">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2 text-sm text-dark-300">
+                        <svg class="animate-spin h-4 w-4 text-brand-400" viewBox="0 0 24 24" fill="none">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span id="scan-phase" class="font-medium text-brand-300">Scanning...</span>
+                    </div>
+                    <div class="flex-1">
+                        <div class="h-2 bg-dark-700 rounded-full overflow-hidden">
+                            <div id="scan-progress-fill" class="h-full bg-gradient-to-r from-brand-500 to-emerald-500 transition-all duration-300 ease-out" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm">
+                        <span id="scan-percent" class="font-bold text-brand-400">0%</span>
+                        <span id="scan-current-item" class="text-dark-400 truncate max-w-[200px]"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Mobile Navigation -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 glass border-t border-dark-700/50 safe-area-pb">
+        <div class="flex items-center justify-around h-16">
+            <a href="/" class="flex flex-col items-center gap-1 px-4 py-2 {% if page == 'dashboard' %}text-brand-400{% else %}text-dark-400{% endif %}">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                </svg>
+                <span class="text-[10px] font-medium">Dashboard</span>
+            </a>
+            <a href="/library" class="flex flex-col items-center gap-1 px-4 py-2 {% if page == 'library' %}text-brand-400{% else %}text-dark-400{% endif %}">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                <span class="text-[10px] font-medium">Library</span>
+            </a>
+            <a href="/settings" class="flex flex-col items-center gap-1 px-4 py-2 {% if page == 'settings' %}text-brand-400{% else %}text-dark-400{% endif %}">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span class="text-[10px] font-medium">Settings</span>
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 mt-20 mb-20 md:mb-6">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Skipped Releases Modal -->
+    <div id="skipped-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div class="bg-dark-800 rounded-xl border border-dark-600/50 shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between p-6 border-b border-dark-700">
+                <h2 id="skipped-modal-title" class="text-xl font-semibold text-white"></h2>
+                <button onclick="closeSkippedModal()" class="text-dark-400 hover:text-white transition">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="p-6 overflow-auto flex-1">
+                <table class="w-full">
+                    <thead>
+                        <tr class="text-left border-b border-dark-700">
+                            <th class="pb-3 text-sm font-medium text-dark-400">Release Title</th>
+                            <th class="pb-3 text-sm font-medium text-dark-400">Date</th>
+                            <th class="pb-3 text-sm font-medium text-dark-400">Reason</th>
+                            <th class="pb-3 text-sm font-medium text-dark-400">Indexer</th>
+                            <th class="pb-3 text-sm font-medium text-dark-400 text-right">Size</th>
+                        </tr>
+                    </thead>
+                    <tbody id="skipped-releases-tbody" class="divide-y divide-dark-700/50">
+                        <!-- Loaded via HTMX -->
+                        <tr>
+                            <td colspan="5" class="text-center py-8 text-dark-400">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="flex items-center justify-end gap-3 p-6 border-t border-dark-700">
+                <button onclick="closeSkippedModal()" class="px-4 py-2 rounded-lg bg-dark-700 hover:bg-dark-600 text-white text-sm font-medium transition">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast notification script -->
+    <script>
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const colors = {
+                success: 'bg-emerald-500/90 border-emerald-400/50',
+                error: 'bg-red-500/90 border-red-400/50',
+                info: 'bg-brand-500/90 border-brand-400/50'
+            };
+            toast.className = `${colors[type]} text-white px-4 py-3 rounded-lg border shadow-lg animate-slide-up flex items-center gap-2`;
+            toast.innerHTML = `
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    ${type === 'success' ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />' : ''}
+                    ${type === 'error' ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />' : ''}
+                    ${type === 'info' ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />' : ''}
+                </svg>
+                <span class="text-sm font-medium">${message}</span>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                toast.style.transition = 'all 0.3s ease-out';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Listen for HTMX events
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            if (evt.detail.successful && evt.detail.xhr.getResponseHeader('HX-Trigger') === 'updates-changed') {
+                showToast('Operation completed', 'success');
+            }
+        });
+        
+        // Scan Progress Bar functionality
+        (function() {
+            const progressBar = document.getElementById('scan-progress-bar');
+            const progressFill = document.getElementById('scan-progress-fill');
+            const phaseText = document.getElementById('scan-phase');
+            const percentText = document.getElementById('scan-percent');
+            const currentItemText = document.getElementById('scan-current-item');
+            
+            let eventSource = null;
+            let isScanning = false;
+            
+            function updateProgressUI(data) {
+                if (data.is_scanning) {
+                    progressBar.classList.remove('hidden');
+                    isScanning = true;
+                    
+                    // Update phase text
+                    const phaseLabels = {
+                        'sync': 'Syncing Library',
+                        'search': 'Searching Updates'
+                    };
+                    phaseText.textContent = phaseLabels[data.phase] || 'Processing...';
+                    
+                    // Update progress bar
+                    const percent = data.percent || 0;
+                    progressFill.style.width = percent + '%';
+                    percentText.textContent = percent + '%';
+                    
+                    // Update current item
+                    if (data.current_item) {
+                        currentItemText.textContent = data.current_item;
+                    } else {
+                        currentItemText.textContent = '';
+                    }
+                } else {
+                    if (isScanning) {
+                        // Scan just completed - show 100% briefly then hide
+                        progressFill.style.width = '100%';
+                        percentText.textContent = '100%';
+                        phaseText.textContent = 'Complete!';
+                        currentItemText.textContent = '';
+                        
+                        setTimeout(() => {
+                            progressBar.classList.add('hidden');
+                            progressFill.style.width = '0%';
+                        }, 1500);
+                        
+                        // Trigger HTMX events to refresh updates list, stats, and activity log
+                        htmx.trigger(document.body, 'updates-changed');
+                        htmx.trigger(document.body, 'stats-changed');
+                        htmx.trigger(document.body, 'activity-changed');
+                    } else {
+                        progressBar.classList.add('hidden');
+                    }
+                    isScanning = false;
+                }
+            }
+            
+            function connectSSE() {
+                if (eventSource) {
+                    eventSource.close();
+                }
+                
+                eventSource = new EventSource('/scan-progress');
+                
+                eventSource.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        updateProgressUI(data);
+                    } catch (e) {
+                        console.error('Failed to parse progress data:', e);
+                    }
+                };
+                
+                eventSource.onerror = function(err) {
+                    console.log('SSE connection closed, will retry...');
+                    eventSource.close();
+                    // Retry connection after a delay
+                    setTimeout(connectSSE, 3000);
+                };
+            }
+            
+            // Start listening when any scan button is clicked
+            document.body.addEventListener('htmx:beforeRequest', function(evt) {
+                const target = evt.detail.elt;
+                if (target && (
+                    target.getAttribute('hx-post') === '/scan-now' ||
+                    target.getAttribute('hx-post') === '/sync-library' ||
+                    target.getAttribute('hx-post') === '/check-updates'
+                )) {
+                    connectSSE();
+                }
+            });
+            
+            // Check initial status on page load
+            fetch('/scan-progress/status')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.is_scanning) {
+                        updateProgressUI(data);
+                        connectSSE();
+                    }
+                })
+                .catch(() => {});
+        })();
+
+        // Skipped Releases Modal
+        function showSkippedModal(gameId, gameTitle) {
+            const modal = document.getElementById('skipped-modal');
+            document.getElementById('skipped-modal-title').textContent = gameTitle + ' - Skipped Releases';
+            
+            // Load skipped releases
+            fetch('/game/' + gameId + '/skipped')
+                .then(res => res.text())
+                .then(html => {
+                    document.getElementById('skipped-releases-tbody').innerHTML = html;
+                    modal.classList.remove('hidden');
+                })
+                .catch(() => {
+                    document.getElementById('skipped-releases-tbody').innerHTML = 
+                        '<tr><td colspan="5" class="text-center py-8 text-dark-400">Error loading skipped releases</td></tr>';
+                    modal.classList.remove('hidden');
+                });
+        }
+
+        function closeSkippedModal() {
+            document.getElementById('skipped-modal').classList.add('hidden');
+        }
+
+        // Close modal on Esc key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeSkippedModal();
+            }
+        });
+    </script>
+</body>
+</html>

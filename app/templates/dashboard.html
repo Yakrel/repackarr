@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Stats Cards -->
+{% include "partials/stats_cards.html" %}
+
+<!-- Updates Section -->
+<div id="updates-container" hx-get="/updates-list" hx-trigger="updates-changed from:body">
+    {% include "partials/updates_list.html" %}
+</div>
+
+<!-- Activity Log -->
+{% include "partials/activity_log.html" %}
+{% endblock %}

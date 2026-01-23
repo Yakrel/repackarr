@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Stats Cards -->
+{% include "partials/stats_cards.html" %}
+
+<!-- Section Header -->
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h1 class="text-2xl font-bold text-white">Game Library</h1>
+        <p class="text-sm text-dark-400 mt-1">Manage your game collection and monitoring settings</p>
+    </div>
+</div>
+
+{% if not games %}
+<!-- Empty State -->
+<div class="text-center py-16 bg-dark-800/30 rounded-2xl border border-dark-700/50 border-dashed">
+    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-500/20 mb-4">
+        <svg class="w-8 h-8 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+        </svg>
+    </div>
+    <h3 class="text-lg font-semibold text-white mb-2">No Games Yet</h3>
+    <p class="text-dark-400 max-w-sm mx-auto mb-6">Your library is empty. Sync your qBittorrent to import games.</p>
+    <button 
+        hx-post="/sync-library" 
+        hx-swap="none"
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold transition">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        Sync Library
+    </button>
+</div>
+{% else %}
+
+<!-- Games Table -->
+<div class="bg-dark-800/50 rounded-2xl border border-dark-700/50 overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead>
+                <tr class="border-b border-dark-700/50">
+                    <th class="px-6 py-4 text-left text-xs font-semibold text-dark-400 uppercase tracking-wider">Game</th>
+                    <th class="px-6 py-4 text-left text-xs font-semibold text-dark-400 uppercase tracking-wider hidden md:table-cell">Search Query</th>
+                    <th class="px-6 py-4 text-left text-xs font-semibold text-dark-400 uppercase tracking-wider hidden lg:table-cell">Version Date</th>
+                    <th class="px-6 py-4 text-left text-xs font-semibold text-dark-400 uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-4 text-left text-xs font-semibold text-dark-400 uppercase tracking-wider hidden lg:table-cell">Last Scan</th>
+                    <th class="px-6 py-4 text-center text-xs font-semibold text-dark-400 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-dark-700/30">
+                {% for game in games %}
+                <tr id="game-row-{{ game.id }}" class="hover:bg-dark-700/30 transition group">
+                    <!-- Game Info -->
+                    <td class="px-6 py-4">
+                        <div class="flex items-center gap-4">
+                            {% if game.cover_url %}
+                            <img src="{{ game.cover_url }}" 
+                                 alt="{{ game.title }}" 
+                                 class="h-16 w-12 object-cover rounded-lg border border-dark-600/50 shadow-lg"
+                                 loading="lazy">
+                            {% else %}
+                            <div class="h-16 w-12 bg-dark-700 rounded-lg flex items-center justify-center text-dark-500 border border-dark-600/50">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                </svg>
+                            </div>
+                            {% endif %}
+                            <div class="min-w-0">
+                                <p class="font-semibold text-white truncate max-w-[200px]">{{ game.title }}</p>
+                                {% if game.current_version %}
+                                <p class="text-xs text-dark-400 mt-0.5 font-mono">v{{ game.current_version }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    
+                    <!-- Search Query (Editable) -->
+                    <td class="px-6 py-4 hidden md:table-cell">
+                        <form hx-post="/game/{{ game.id }}/update-query" 
+                              hx-trigger="submit" 
+                              hx-target="#query-feedback-{{ game.id }}"
+                              hx-swap="innerHTML"
+                              class="flex items-center gap-2">
+                            <input type="text" 
+                                   name="search_query" 
+                                   value="{{ game.search_query }}" 
+                                   class="bg-dark-900 border border-dark-600/50 text-dark-200 text-xs rounded-lg px-3 py-2 w-full max-w-[200px] focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition">
+                            <button type="submit" 
+                                    class="p-2 rounded-lg text-dark-400 hover:text-brand-400 hover:bg-brand-500/10 transition"
+                                    title="Save">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                            </button>
+                            <span id="query-feedback-{{ game.id }}" class="text-xs"></span>
+                        </form>
+                    </td>
+                    
+                    <!-- Version Date -->
+                    <td class="px-6 py-4 hidden lg:table-cell">
+                        <span class="font-mono text-sm text-dark-300">{{ game.current_version_date.strftime('%Y-%m-%d') }}</span>
+                    </td>
+                    
+                    <!-- Status Toggle -->
+                    <td class="px-6 py-4"
+                        hx-post="/game/{{ game.id }}/toggle-monitor" 
+                        hx-target="this" 
+                        hx-swap="innerHTML">
+                        {% if game.status == 'monitored' %}
+                        <button class="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 hover:bg-emerald-500/30 hover:border-emerald-500/50 transition cursor-pointer shadow-sm hover:shadow-md">
+                            <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse group-hover:animate-none"></span>
+                            <span class="text-xs font-semibold text-emerald-300 group-hover:text-emerald-200 uppercase tracking-wide">Monitored</span>
+                        </button>
+                        {% else %}
+                        <button class="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-600/30 border border-slate-500/30 hover:bg-slate-500/40 hover:border-slate-500/50 transition cursor-pointer shadow-sm hover:shadow-md">
+                            <span class="h-2 w-2 rounded-full bg-slate-400 group-hover:bg-slate-300"></span>
+                            <span class="text-xs font-semibold text-slate-300 group-hover:text-slate-200 uppercase tracking-wide">Ignored</span>
+                        </button>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Last Scan -->
+                    <td class="px-6 py-4 hidden lg:table-cell">
+                        {% if game.last_scanned_at %}
+                        <span class="text-sm text-dark-400">{{ game.last_scanned_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                        {% else %}
+                        <span class="text-sm text-dark-500">Never</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions -->
+                    <td class="px-6 py-4">
+                        <div class="flex items-center justify-center gap-1">
+                            <button hx-delete="/game/{{ game.id }}" 
+                                    hx-confirm="Delete {{ game.title }} from library?"
+                                    hx-target="#game-row-{{ game.id }}" 
+                                    hx-swap="outerHTML swap:0.2s"
+                                    class="p-2 rounded-lg text-dark-400 hover:text-red-400 hover:bg-red-500/10 transition"
+                                    title="Delete from library">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
