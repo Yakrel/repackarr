@@ -151,26 +151,15 @@
                                 
                                 <!-- Actions -->
                                 <div class="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
-                                    <!-- Ignore Permanently -->
+                                    <!-- Dismiss (Blacklist) -->
                                     <button hx-post="/release/{{ release.id }}/ignore" 
                                             hx-target="#release-{{ release.id }}" 
                                             hx-swap="outerHTML"
-                                            hx-confirm="Permanently ignore this release? It will be excluded from future scans."
-                                            class="p-2 rounded-lg text-dark-400 hover:text-yellow-400 hover:bg-yellow-500/10 transition" 
-                                            title="Ignore Permanently">
+                                            hx-confirm="Blacklist this release? It won't appear in future scans. Manage blacklisted items in Settings."
+                                            class="p-2 rounded-lg text-dark-400 hover:text-red-400 hover:bg-red-500/10 transition" 
+                                            title="Dismiss (Blacklist)">
                                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                                        </svg>
-                                    </button>
-                                    
-                                    <!-- Dismiss -->
-                                    <button hx-post="/release/{{ release.id }}/dismiss" 
-                                            hx-target="#release-{{ release.id }}" 
-                                            hx-swap="outerHTML"
-                                            class="p-2 rounded-lg text-dark-400 hover:text-red-400 hover:bg-red-500/10 transition" 
-                                            title="Dismiss (hide for now)">
-                                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                                         </svg>
                                     </button>
                                     

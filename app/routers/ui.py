@@ -391,20 +391,6 @@ async def download_release(id: int, session: Session = Depends(get_session)):
         await qbit.close()
 
 
-@router.post("/release/{id}/dismiss", response_class=HTMLResponse)
-async def dismiss_release(id: int, session: Session = Depends(get_session)):
-    """Dismiss/ignore a release - removes it from the updates list."""
-    release = session.get(Release, id)
-    if not release:
-        raise HTTPException(status_code=404, detail="Release not found")
-    
-    release.is_ignored = True
-    session.add(release)
-    session.commit()
-    
-    return HTMLResponse("", headers={"HX-Trigger": "stats-changed"})  # HTMX removes the element
-
-
 @router.post("/release/{id}/ignore", response_class=HTMLResponse)
 async def ignore_release_permanently(id: int, session: Session = Depends(get_session)):
     """
@@ -455,13 +441,10 @@ async def confirm_update(id: int, session: Session = Depends(get_session)):
         game.current_version = release.parsed_version
     session.add(game)
     
-    # Delete the confirmed release and any older releases
-    # Keep releases that are NEWER than the one we just confirmed
+    # Delete ALL releases for this game (clean slate)
+    # Next scan will find newer releases automatically based on the new version date
     releases_to_delete = session.exec(
-        select(Release).where(
-            Release.game_id == game.id,
-            Release.upload_date <= release.upload_date
-        )
+        select(Release).where(Release.game_id == game.id)
     ).all()
     
     for r in releases_to_delete:
