@@ -519,7 +519,7 @@ async def update_game_details(
         raise HTTPException(status_code=400, detail="Invalid date format. Please use YYYY-MM-DD format.")
     
     # Update game fields
-    game.title = title.strip()
+    game.title = title.strip().title()
     game.search_query = search_query.strip()
     game.current_version_date = parsed_date
     game.current_version = version.strip() if version else None
@@ -657,7 +657,7 @@ async def add_manual_game(
     
     # Create the game
     new_game = Game(
-        title=title,
+        title=title.title(),
         search_query=search_query,
         current_version_date=parsed_date,
         current_version=None,

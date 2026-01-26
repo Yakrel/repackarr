@@ -90,20 +90,22 @@
                                     {% if game.is_manual %}
                                     <span class="px-1.5 py-0.5 text-[10px] font-semibold text-amber-300 bg-amber-500/20 rounded border border-amber-500/30" title="Manually added">Manual</span>
                                     {% endif %}
+                                </div>
+                                <div class="flex items-center gap-2 mt-0.5">
+                                    {% if game.current_version %}
+                                    <p class="text-xs text-dark-400 font-mono">v{{ game.current_version }}</p>
+                                    {% endif %}
                                     {% if game.steam_app_id %}
                                     <a href="https://steamdb.info/app/{{ game.steam_app_id }}/patchnotes/" 
                                        target="_blank"
-                                       class="p-1 rounded hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 transition"
-                                       title="View on SteamDB">
-                                        <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                                            <path d="M11.9 1.9a10 10 0 00-7 17.1l3.7-1.5.1-.3c.2-1 1-1.7 2-1.7.3 0 .5 0 .8.2l2.6-3.8v-.1c0-2 1.6-3.6 3.6-3.6s3.6 1.6 3.6 3.6-1.6 3.6-3.6 3.6h-.1l-3.7 2.6c0 .2 0 .4 0 .6a2.6 2.6 0 01-5.2 0l-4.6 1.9a10 10 0 1016.8-7.1 10 10 0 00-8-5.9zm6.2 10.7a2.4 2.4 0 100-4.8 2.4 2.4 0 000 4.8z"/>
+                                       class="p-1 rounded hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 transition"
+                                       title="View changelog on SteamDB">
+                                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                         </svg>
                                     </a>
                                     {% endif %}
                                 </div>
-                                {% if game.current_version %}
-                                <p class="text-xs text-dark-400 mt-0.5 font-mono">v{{ game.current_version }}</p>
-                                {% endif %}
                             </div>
                         </div>
                     </td>
@@ -254,7 +256,7 @@
                 <label for="edit-game-platform" class="block text-sm font-medium text-dark-200 mb-2">Platform Filter</label>
                 <select id="edit-game-platform"
                         name="platform_filter"
-                        class="w-full bg-dark-900 border border-dark-600/50 text-dark-100 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition">
+                        class="w-full bg-dark-900 border border-dark-600/50 text-dark-100 rounded-lg px-4 py-2.5 pr-10 focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2724%27 height=%2724%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%2394a3b8%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3e%3cpolyline points=%276 9 12 15 18 9%27%3e%3c/polyline%3e%3c/svg%3e')] bg-[length:1.25rem_1.25rem] bg-[position:right_0.5rem_center] bg-no-repeat">
                     <option value="Windows">Windows Only</option>
                     <option value="Windows,Linux">Windows + Linux</option>
                     <option value="Linux">Linux Only</option>
@@ -347,7 +349,7 @@
                 <label for="add-game-platform" class="block text-sm font-medium text-dark-200 mb-2">Platform Filter</label>
                 <select id="add-game-platform"
                         name="platform_filter"
-                        class="w-full bg-dark-900 border border-dark-600/50 text-dark-100 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition">
+                        class="w-full bg-dark-900 border border-dark-600/50 text-dark-100 rounded-lg px-4 py-2.5 pr-10 focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2724%27 height=%2724%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%2394a3b8%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3e%3cpolyline points=%276 9 12 15 18 9%27%3e%3c/polyline%3e%3c/svg%3e')] bg-[length:1.25rem_1.25rem] bg-[position:right_0.5rem_center] bg-no-repeat">
                     <option value="Windows" selected>Windows Only</option>
                     <option value="Windows,Linux">Windows + Linux</option>
                     <option value="Linux">Linux Only</option>
