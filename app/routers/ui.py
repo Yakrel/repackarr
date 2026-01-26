@@ -732,11 +732,11 @@ async def get_game_skipped_releases(
             
             rows.append(f"""
                 <tr class="border-b border-dark-700/50 hover:bg-dark-700/30">
-                    <td class="py-3 text-sm text-dark-200" title="{title}">{title_display}</td>
-                    <td class="py-3 text-sm text-dark-400">{skip.get('date', 'N/A')}</td>
+                    <td class="py-3 text-sm text-dark-200 break-words" title="{title}">{title_display}</td>
+                    <td class="py-3 text-sm text-dark-400 whitespace-nowrap">{skip.get('date', 'N/A')}</td>
                     <td class="py-3 text-sm {reason_class}">{skip.get('reason', 'Unknown')}</td>
                     <td class="py-3 text-sm text-dark-400">{skip.get('indexer', 'N/A')}</td>
-                    <td class="py-3 text-sm text-dark-400 text-right">{skip.get('size', 'N/A')}</td>
+                    <td class="py-3 text-sm text-dark-400 text-right whitespace-nowrap">{skip.get('size', 'N/A')}</td>
                 </tr>
             """)
         
