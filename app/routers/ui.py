@@ -497,6 +497,40 @@ async def update_game_query(
     )
 
 
+@router.post("/game/{id}/update-details", response_class=HTMLResponse)
+async def update_game_details(
+    id: int,
+    title: str = Form(...),
+    search_query: str = Form(...),
+    version_date: str = Form(...),
+    version: str = Form(""),
+    platform_filter: str = Form("Windows"),
+    session: Session = Depends(get_session)
+):
+    """Update game details including platform filter."""
+    game = session.get(Game, id)
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    # Parse version date
+    try:
+        parsed_date = datetime.strptime(version_date, '%Y-%m-%d')
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Please use YYYY-MM-DD format.")
+    
+    # Update game fields
+    game.title = title.strip()
+    game.search_query = search_query.strip()
+    game.current_version_date = parsed_date
+    game.current_version = version.strip() if version else None
+    game.platform_filter = platform_filter
+    
+    session.add(game)
+    session.commit()
+    
+    return HTMLResponse("", headers={"HX-Refresh": "true"})
+
+
 @router.post("/game/{id}/reset-scan", response_class=HTMLResponse)
 async def reset_game_scan(id: int, session: Session = Depends(get_session)):
     """Clear existing releases and trigger a fresh Prowlarr search."""
@@ -574,7 +608,7 @@ async def add_manual_game(
     title: str = Form(...),
     search_query: str = Form(...),
     version_date: str = Form(...),
-    version: str = Form(""),
+    platform_filter: str = Form("Windows"),
     session: Session = Depends(get_session)
 ):
     """
@@ -586,7 +620,6 @@ async def add_manual_game(
     # Validate inputs
     title = title.strip()
     search_query = search_query.strip()
-    version = version.strip() if version else None
     
     if not title:
         raise HTTPException(status_code=400, detail="Title is required")
@@ -623,10 +656,11 @@ async def add_manual_game(
         title=title,
         search_query=search_query,
         current_version_date=parsed_date,
-        current_version=version,
+        current_version=None,
         status=GameStatus.MONITORED,
         cover_url=cover_url,
-        is_manual=True
+        is_manual=True,
+        platform_filter=platform_filter
     )
     session.add(new_game)
     session.commit()
@@ -666,10 +700,16 @@ async def get_game_skipped_releases(
     
     try:
         all_skipped = json.loads(last_scan.skip_details)
-        # Filter for this game
-        game_skipped = [s for s in all_skipped if s.get("game_id") == game_id]
         
-        if not game_skipped:
+        # all_skipped structure: [{"game": "Title", "game_id": 123, "items": [skip_info, ...]}]
+        # Find data for this specific game
+        game_data = None
+        for game_skip in all_skipped:
+            if game_skip.get("game_id") == game_id:
+                game_data = game_skip
+                break
+        
+        if not game_data or not game_data.get("items"):
             return HTMLResponse("""
                 <tr>
                     <td colspan="5" class="text-center text-dark-400 py-4">
@@ -678,9 +718,9 @@ async def get_game_skipped_releases(
                 </tr>
             """)
         
-        # Generate HTML rows
+        # Generate HTML rows from items
         rows = []
-        for skip in game_skipped[:50]:  # Limit to 50
+        for skip in game_data["items"][:50]:  # Limit to 50
             reason_class = "text-yellow-400" if "ignored" in skip.get("reason", "").lower() else "text-dark-300"
             title = skip.get('title', 'N/A')
             title_display = title[:80] + "..." if len(title) > 80 else title

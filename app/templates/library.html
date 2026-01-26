@@ -155,6 +155,14 @@
                     <!-- Actions -->
                     <td class="px-6 py-4">
                         <div class="flex items-center justify-center gap-1">
+                            <!-- Edit Button -->
+                            <button onclick='showEditGameModal({{ game.id }}, {{ game.title|tojson }}, {{ game.search_query|tojson }}, "{{ game.current_version_date.strftime('%Y-%m-%d') }}", {{ (game.current_version or '')|tojson }}, {{ game.platform_filter|tojson }})'
+                                    class="p-2 rounded-lg text-dark-400 hover:text-brand-400 hover:bg-brand-500/10 transition"
+                                    title="Edit game details">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                            </button>
                             <button hx-delete="/game/{{ game.id }}" 
                                     hx-confirm="Delete {{ game.title }} from library?"
                                     hx-target="#game-row-{{ game.id }}" 
@@ -174,6 +182,88 @@
     </div>
 </div>
 {% endif %}
+
+<!-- Edit Game Modal -->
+<div id="edit-game-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div class="bg-dark-800 rounded-xl border border-dark-600/50 shadow-2xl w-full max-w-lg">
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between p-6 border-b border-dark-700">
+            <h2 class="text-xl font-semibold text-white">Edit Game</h2>
+            <button onclick="closeEditGameModal()" class="text-dark-400 hover:text-white transition">
+                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+
+        <!-- Modal Body -->
+        <form id="edit-game-form" hx-post="" hx-target="body" class="p-6 space-y-5">
+            <!-- Title -->
+            <div>
+                <label for="edit-game-title" class="block text-sm font-medium text-dark-200 mb-2">Game Title</label>
+                <input type="text" 
+                       id="edit-game-title"
+                       name="title" 
+                       required
+                       class="w-full bg-dark-900 border border-dark-600/50 text-dark-100 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition">
+            </div>
+
+            <!-- Search Query -->
+            <div>
+                <label for="edit-game-query" class="block text-sm font-medium text-dark-200 mb-2">Search Query</label>
+                <input type="text" 
+                       id="edit-game-query"
+                       name="search_query" 
+                       required
+                       class="w-full bg-dark-900 border border-dark-600/50 text-dark-100 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition">
+            </div>
+
+            <!-- Version Date -->
+            <div>
+                <label for="edit-game-date" class="block text-sm font-medium text-dark-200 mb-2">Version Date</label>
+                <input type="date" 
+                       id="edit-game-date"
+                       name="version_date" 
+                       required
+                       class="w-full bg-dark-900 border border-dark-600/50 text-dark-100 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition">
+            </div>
+
+            <!-- Version -->
+            <div>
+                <label for="edit-game-version" class="block text-sm font-medium text-dark-200 mb-2">
+                    Version <span class="text-dark-500 font-normal">(optional, for display only)</span>
+                </label>
+                <input type="text" 
+                       id="edit-game-version"
+                       name="version" 
+                       class="w-full bg-dark-900 border border-dark-600/50 text-dark-100 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition">
+            </div>
+
+            <!-- Platform Filter -->
+            <div>
+                <label for="edit-game-platform" class="block text-sm font-medium text-dark-200 mb-2">Platform Filter</label>
+                <select id="edit-game-platform"
+                        name="platform_filter"
+                        class="w-full bg-dark-900 border border-dark-600/50 text-dark-100 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition">
+                    <option value="Windows">Windows Only</option>
+                    <option value="Windows,Linux">Windows + Linux</option>
+                    <option value="Linux">Linux Only</option>
+                </select>
+                <p class="mt-1.5 text-xs text-dark-400">Wine/Linux releases will be filtered based on this setting.</p>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="flex items-center justify-end gap-3 pt-2">
+                <button type="button" onclick="closeEditGameModal()" class="px-4 py-2 rounded-lg bg-dark-700 hover:bg-dark-600 text-white text-sm font-medium transition">
+                    Cancel
+                </button>
+                <button type="submit" class="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold transition shadow-lg shadow-brand-600/20">
+                    Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 
 <!-- Add Game Modal -->
 <div id="add-game-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -242,17 +332,17 @@
                 <p class="mt-1.5 text-xs text-dark-400">Date of the version you currently have installed</p>
             </div>
 
-            <!-- Version (Optional) -->
+            <!-- Platform Filter -->
             <div>
-                <label for="add-game-version" class="block text-sm font-medium text-dark-200 mb-2">
-                    Version <span class="text-dark-500 font-normal">(optional)</span>
-                </label>
-                <input type="text" 
-                       id="add-game-version"
-                       name="version" 
-                       placeholder="e.g. 1.10.163, Build 12345"
-                       class="w-full bg-dark-900 border border-dark-600/50 text-dark-100 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition placeholder:text-dark-500">
-                <p class="mt-1.5 text-xs text-dark-400">Current installed version string if known</p>
+                <label for="add-game-platform" class="block text-sm font-medium text-dark-200 mb-2">Platform Filter</label>
+                <select id="add-game-platform"
+                        name="platform_filter"
+                        class="w-full bg-dark-900 border border-dark-600/50 text-dark-100 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition">
+                    <option value="Windows" selected>Windows Only</option>
+                    <option value="Windows,Linux">Windows + Linux</option>
+                    <option value="Linux">Linux Only</option>
+                </select>
+                <p class="mt-1.5 text-xs text-dark-400">Which platforms to search for. Wine/Linux releases will be filtered based on this setting.</p>
             </div>
 
             <!-- Info Banner -->
@@ -280,6 +370,32 @@
 </div>
 
 <script>
+    function showEditGameModal(gameId, title, query, date, version, platform) {
+        const modal = document.getElementById('edit-game-modal');
+        const form = document.getElementById('edit-game-form');
+        
+        // Set form action
+        form.setAttribute('hx-post', `/game/${gameId}/update-details`);
+        
+        // Populate fields
+        document.getElementById('edit-game-title').value = title;
+        document.getElementById('edit-game-query').value = query;
+        document.getElementById('edit-game-date').value = date;
+        document.getElementById('edit-game-version').value = version;
+        document.getElementById('edit-game-platform').value = platform;
+        
+        // Show modal
+        modal.classList.remove('hidden');
+        
+        // Re-process htmx attributes
+        htmx.process(form);
+    }
+    
+    function closeEditGameModal() {
+        const modal = document.getElementById('edit-game-modal');
+        modal.classList.add('hidden');
+    }
+
     function showAddGameModal() {
         const modal = document.getElementById('add-game-modal');
         modal.classList.remove('hidden');
@@ -298,13 +414,20 @@
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             closeAddGameModal();
+            closeEditGameModal();
         }
     });
     
-    // Close modal when clicking outside
+    // Close modals when clicking outside
     document.getElementById('add-game-modal').addEventListener('click', function(e) {
         if (e.target === this) {
             closeAddGameModal();
+        }
+    });
+    
+    document.getElementById('edit-game-modal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeEditGameModal();
         }
     });
     

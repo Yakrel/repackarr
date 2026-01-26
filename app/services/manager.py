@@ -168,8 +168,9 @@ async def run_search_updates() -> int:
     # Save Scan Log
     duration = (datetime.utcnow() - start_time).total_seconds()
     
-    # Process and group skipped items
-    skip_summary = _process_skip_summary(all_skipped)
+    # Save raw all_skipped data (with game_id, items, etc.) for UI display
+    # This preserves the full structure needed by the skipped releases modal
+    skip_details_for_db = json.dumps(all_skipped) if all_skipped else None
     
     try:
         with Session(engine) as session:
@@ -183,7 +184,7 @@ async def run_search_updates() -> int:
                     "total_results_found": total_found,
                     "errors": scan_details[:10],  # Limit error details
                 }),
-                skip_details=json.dumps(skip_summary) if skip_summary else None
+                skip_details=skip_details_for_db
             )
             session.add(log_entry)
             session.commit()
