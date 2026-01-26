@@ -112,6 +112,13 @@ async def lifespan(app: FastAPI):
     create_db_and_tables()
     logger.info("Database initialized")
     
+    # Run migrations
+    from app.migration_runner import run_migrations
+    try:
+        run_migrations()
+    except Exception as e:
+        logger.error(f"Migration error: {e}")
+    
     # Load dynamic settings
     load_settings_from_db()
     

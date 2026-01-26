@@ -23,6 +23,7 @@ class GameBase(SQLModel):
     # IGDB Metadata
     igdb_id: Optional[int] = Field(default=None, description="IGDB game identifier")
     cover_url: Optional[str] = Field(default=None, description="URL to game cover image")
+    steam_app_id: Optional[int] = Field(default=None, description="Steam App ID for external links")
 
 
 class Game(GameBase, table=True):

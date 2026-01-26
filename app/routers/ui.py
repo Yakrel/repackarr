@@ -640,12 +640,16 @@ async def add_manual_game(
     if existing_game:
         raise HTTPException(status_code=400, detail="A game with this title already exists")
     
-    # Try to fetch cover from IGDB
+    # Try to fetch metadata from IGDB
     cover_url = None
+    steam_app_id = None
     if settings.is_igdb_enabled:
         igdb = IGDBService()
         try:
-            cover_url = await igdb.get_game_cover(title)
+            metadata = await igdb.get_game_metadata(title)
+            if metadata:
+                cover_url = metadata.get("cover_url")
+                steam_app_id = metadata.get("steam_app_id")
         except Exception:
             pass
         finally:
@@ -659,6 +663,7 @@ async def add_manual_game(
         current_version=None,
         status=GameStatus.MONITORED,
         cover_url=cover_url,
+        steam_app_id=steam_app_id,
         is_manual=True,
         platform_filter=platform_filter
     )

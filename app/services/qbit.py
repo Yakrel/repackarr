@@ -181,13 +181,17 @@ class QBitService:
         logger.info(f"New game detected: {title} (v{version or 'unknown'})")
         logger.debug(f"Search query: {search_query}")
         
-        # Try to fetch cover from IGDB
+        # Try to fetch metadata from IGDB
         cover_url = None
+        steam_app_id = None
         if settings.is_igdb_enabled:
             try:
-                cover_url = await self.igdb.get_game_cover(title)
+                metadata = await self.igdb.get_game_metadata(title)
+                if metadata:
+                    cover_url = metadata.get("cover_url")
+                    steam_app_id = metadata.get("steam_app_id")
             except Exception as e:
-                logger.debug(f"Failed to fetch cover for {title}: {e}")
+                logger.debug(f"Failed to fetch metadata for {title}: {e}")
         
         new_game = Game(
             title=title,
@@ -195,7 +199,8 @@ class QBitService:
             current_version_date=torrent_date,
             current_version=version,
             status=GameStatus.MONITORED,
-            cover_url=cover_url
+            cover_url=cover_url,
+            steam_app_id=steam_app_id
         )
         session.add(new_game)
         logger.info(f"Added {title} to library")
@@ -223,14 +228,19 @@ class QBitService:
             session.add(game)
             updated = True
         
-        # Retry cover fetch if missing
-        if not game.cover_url and settings.is_igdb_enabled:
+        # Retry metadata fetch if missing
+        if (not game.cover_url or not game.steam_app_id) and settings.is_igdb_enabled:
             try:
-                cover_url = await self.igdb.get_game_cover(game.title)
-                if cover_url:
-                    game.cover_url = cover_url
-                    session.add(game)
-                    updated = True
+                metadata = await self.igdb.get_game_metadata(game.title)
+                if metadata:
+                    if not game.cover_url and metadata.get("cover_url"):
+                        game.cover_url = metadata["cover_url"]
+                        updated = True
+                    if not game.steam_app_id and metadata.get("steam_app_id"):
+                        game.steam_app_id = metadata["steam_app_id"]
+                        updated = True
+                    if updated:
+                        session.add(game)
             except Exception:
                 pass
                 

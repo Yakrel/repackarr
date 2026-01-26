@@ -66,15 +66,15 @@ class IGDBService:
             logger.error(f"Failed to get IGDB token: {e}")
             return None
 
-    async def get_game_cover(self, game_name: str) -> str | None:
+    async def get_game_metadata(self, game_name: str) -> dict[str, any] | None:
         """
-        Search for a game and return its cover image URL.
+        Search for a game and return metadata including cover and Steam App ID.
         
         Args:
             game_name: Name of the game to search for
             
         Returns:
-            Cover image URL (720p) or None if not found
+            Dict with 'cover_url' and 'steam_app_id' or None if not found
         """
         if not game_name:
             return None
@@ -90,9 +90,9 @@ class IGDBService:
                 "Accept": "application/json"
             }
 
-            # Search for game with cover data
+            # Search for game with cover and external game IDs (Steam)
             # Removed category filter to allow Bundles (3), Expansions, etc.
-            query = f'fields name, cover.image_id, category; search "{game_name}"; limit 5;'
+            query = f'fields name, cover.image_id, category, external_games.uid, external_games.category; search "{game_name}"; limit 5;'
             
             resp = await self.client.post(
                 f"{self.api_url}/games", 
@@ -123,14 +123,28 @@ class IGDBService:
             # Fallback to first result if no better match found
             target_game = best_match or results[0]
             
-            cover_info = target_game.get("cover")
+            result = {}
             
+            # Extract cover URL
+            cover_info = target_game.get("cover")
             if cover_info and "image_id" in cover_info:
                 img_id = cover_info["image_id"]
                 # Use t_cover_big for 264x374 resolution
-                url = f"https://images.igdb.com/igdb/image/upload/t_cover_big/{img_id}.jpg"
-                logger.info(f"Found cover for {game_name} -> {target_game.get('name')}")
-                return url
+                result["cover_url"] = f"https://images.igdb.com/igdb/image/upload/t_cover_big/{img_id}.jpg"
+            
+            # Extract Steam App ID (category 1 = Steam)
+            external_games = target_game.get("external_games", [])
+            for ext in external_games:
+                if ext.get("category") == 1:  # Steam
+                    try:
+                        result["steam_app_id"] = int(ext.get("uid"))
+                        break
+                    except (ValueError, TypeError):
+                        pass
+            
+            if result:
+                logger.info(f"Found metadata for {game_name} -> {target_game.get('name')}: {result}")
+                return result
             
             return None
             
@@ -143,6 +157,20 @@ class IGDBService:
         except Exception as e:
             logger.error(f"IGDB search error for {game_name}: {e}")
             return None
+
+    async def get_game_cover(self, game_name: str) -> str | None:
+        """
+        Legacy method for backward compatibility.
+        Search for a game and return its cover image URL.
+        
+        Args:
+            game_name: Name of the game to search for
+            
+        Returns:
+            Cover image URL or None if not found
+        """
+        metadata = await self.get_game_metadata(game_name)
+        return metadata.get("cover_url") if metadata else None
 
     async def close(self) -> None:
         """Close the HTTP client."""
