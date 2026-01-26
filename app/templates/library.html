@@ -156,7 +156,7 @@
                     <td class="px-6 py-4">
                         <div class="flex items-center justify-center gap-1">
                             <!-- Edit Button -->
-                            <button onclick="showEditGameModal({{ game.id }}, '{{ game.title }}', '{{ game.search_query }}', '{{ game.current_version_date.strftime('%Y-%m-%d') }}', '{{ game.current_version or '' }}', '{{ game.platform_filter }}')"
+                            <button onclick='showEditGameModal({{ game.id }}, {{ game.title|tojson }}, {{ game.search_query|tojson }}, "{{ game.current_version_date.strftime('%Y-%m-%d') }}", {{ (game.current_version or '')|tojson }}, {{ game.platform_filter|tojson }})'
                                     class="p-2 rounded-lg text-dark-400 hover:text-brand-400 hover:bg-brand-500/10 transition"
                                     title="Edit game details">
                                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

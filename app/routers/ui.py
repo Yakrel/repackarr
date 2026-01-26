@@ -516,7 +516,7 @@ async def update_game_details(
     try:
         parsed_date = datetime.strptime(version_date, '%Y-%m-%d')
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format")
+        raise HTTPException(status_code=400, detail="Invalid date format. Please use YYYY-MM-DD format.")
     
     # Update game fields
     game.title = title.strip()

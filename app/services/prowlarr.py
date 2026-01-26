@@ -289,12 +289,13 @@ class ProwlarrService:
         # Check for Linux/Wine releases if only Windows is allowed
         if "windows" in allowed_platforms and "linux" not in allowed_platforms:
             # Filter out Wine and Linux-specific releases
-            linux_indicators = ["wine", "linux", "[l]", " l ", "proton"]
+            # Use word boundaries to avoid false positives
+            linux_indicators = [r"\bwine\b", r"\blinux\b", r"\[l\]", r"\sproton\b"]
             # But allow releases that explicitly mention Windows
-            windows_indicators = ["windows", "win64", "win32", "[w]", " w "]
+            windows_indicators = [r"\bwindows\b", r"\bwin64\b", r"\bwin32\b", r"\[w\]"]
             
-            has_linux_indicator = any(ind in title_lower for ind in linux_indicators)
-            has_windows_indicator = any(ind in title_lower for ind in windows_indicators)
+            has_linux_indicator = any(re.search(ind, title_lower) for ind in linux_indicators)
+            has_windows_indicator = any(re.search(ind, title_lower) for ind in windows_indicators)
             
             # If it has Linux indicators and no Windows indicators, skip it
             if has_linux_indicator and not has_windows_indicator:
@@ -302,8 +303,8 @@ class ProwlarrService:
         
         # Check for macOS if not allowed
         if "macos" not in allowed_platforms and "mac" not in allowed_platforms:
-            macos_indicators = ["macos", "mac ", "osx"]
-            if any(ind in title_lower for ind in macos_indicators):
+            macos_indicators = [r"\bmacos\b", r"\bmac\b", r"\bosx\b"]
+            if any(re.search(ind, title_lower) for ind in macos_indicators):
                 return make_skip("Platform excluded (macOS)", "platform")
 
         # 3. Keyword Filter: Exclude unwanted content types
