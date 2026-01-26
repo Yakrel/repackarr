@@ -666,10 +666,16 @@ async def get_game_skipped_releases(
     
     try:
         all_skipped = json.loads(last_scan.skip_details)
-        # Filter for this game
-        game_skipped = [s for s in all_skipped if s.get("game_id") == game_id]
         
-        if not game_skipped:
+        # all_skipped structure: [{"game": "Title", "game_id": 123, "items": [skip_info, ...]}]
+        # Find data for this specific game
+        game_data = None
+        for game_skip in all_skipped:
+            if game_skip.get("game_id") == game_id:
+                game_data = game_skip
+                break
+        
+        if not game_data or not game_data.get("items"):
             return HTMLResponse("""
                 <tr>
                     <td colspan="5" class="text-center text-dark-400 py-4">
@@ -678,9 +684,9 @@ async def get_game_skipped_releases(
                 </tr>
             """)
         
-        # Generate HTML rows
+        # Generate HTML rows from items
         rows = []
-        for skip in game_skipped[:50]:  # Limit to 50
+        for skip in game_data["items"][:50]:  # Limit to 50
             reason_class = "text-yellow-400" if "ignored" in skip.get("reason", "").lower() else "text-dark-300"
             title = skip.get('title', 'N/A')
             title_display = title[:80] + "..." if len(title) > 80 else title
