@@ -14,6 +14,7 @@ from app.database import get_session
 from app.models import Game, Release, GameStatus, AppSetting, ScanLog, IgnoredRelease
 from app.services.manager import run_scan_cycle, run_sync_library, run_search_updates
 from app.services.prowlarr import ProwlarrService
+from app.services.qbit import QBitService
 from app.config import get_settings
 from app.scheduler import scheduler
 from app.progress import progress_manager
