@@ -18,6 +18,7 @@ class GameBase(SQLModel):
     current_version: Optional[str] = Field(default=None, description="Version string if detected")
     status: GameStatus = Field(default=GameStatus.MONITORED, description="Monitoring status")
     platform_filter: str = Field(default="Windows,Linux", description="Allowed platforms")
+    is_manual: bool = Field(default=False, description="True if manually added (not from qBittorrent)")
     
     # IGDB Metadata
     igdb_id: Optional[int] = Field(default=None, description="IGDB game identifier")

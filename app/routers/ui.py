@@ -568,6 +568,77 @@ async def delete_game(id: int, session: Session = Depends(get_session)):
     return HTMLResponse("", headers={"HX-Trigger": "stats-changed"})  # HTMX removes the row
 
 
+@router.post("/game/add-manual", response_class=HTMLResponse)
+async def add_manual_game(
+    request: Request,
+    title: str = Form(...),
+    search_query: str = Form(...),
+    version_date: str = Form(...),
+    version: str = Form(""),
+    session: Session = Depends(get_session)
+):
+    """
+    Manually add a game to the library for tracking.
+    This is for games not synced from qBittorrent.
+    """
+    from app.services.igdb import IGDBService
+    from app.utils import sanitize_search_query
+    
+    # Validate inputs
+    title = title.strip()
+    search_query = search_query.strip()
+    version = version.strip() if version else None
+    
+    if not title:
+        raise HTTPException(status_code=400, detail="Title is required")
+    if not search_query:
+        raise HTTPException(status_code=400, detail="Search query is required")
+    
+    # Parse version date
+    try:
+        parsed_date = datetime.strptime(version_date, '%Y-%m-%d')
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    
+    # Check if game already exists
+    existing_game = session.exec(
+        select(Game).where(Game.title == title)
+    ).first()
+    
+    if existing_game:
+        raise HTTPException(status_code=400, detail="A game with this title already exists")
+    
+    # Try to fetch cover from IGDB
+    cover_url = None
+    if settings.is_igdb_enabled:
+        igdb = IGDBService()
+        try:
+            cover_url = await igdb.get_game_cover(title)
+        except Exception:
+            pass
+        finally:
+            await igdb.close()
+    
+    # Create the game
+    new_game = Game(
+        title=title,
+        search_query=search_query,
+        current_version_date=parsed_date,
+        current_version=version,
+        status=GameStatus.MONITORED,
+        cover_url=cover_url,
+        is_manual=True
+    )
+    session.add(new_game)
+    session.commit()
+    
+    # Return success with refresh trigger
+    return HTMLResponse(
+        "",
+        headers={"HX-Refresh": "true"}
+    )
+
+
 @router.get("/game/{game_id}/skipped", response_class=HTMLResponse)
 async def get_game_skipped_releases(
     request: Request,
