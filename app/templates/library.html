@@ -283,8 +283,6 @@
     function showAddGameModal() {
         const modal = document.getElementById('add-game-modal');
         modal.classList.remove('hidden');
-        // Set default date to today
-        document.getElementById('add-game-date').valueAsDate = new Date();
         // Focus the title input
         setTimeout(() => document.getElementById('add-game-title').focus(), 100);
     }

@@ -582,7 +582,6 @@ async def add_manual_game(
     This is for games not synced from qBittorrent.
     """
     from app.services.igdb import IGDBService
-    from app.utils import sanitize_search_query
     
     # Validate inputs
     title = title.strip()
