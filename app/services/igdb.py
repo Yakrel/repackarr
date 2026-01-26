@@ -132,10 +132,10 @@ class IGDBService:
                 # Use t_cover_big for 264x374 resolution
                 result["cover_url"] = f"https://images.igdb.com/igdb/image/upload/t_cover_big/{img_id}.jpg"
             
-            # Extract Steam App ID (category 1 = Steam)
+            # Extract Steam App ID (external_game_source 1 = Steam)
             external_games = target_game.get("external_games", [])
             for ext in external_games:
-                if ext.get("category") == 1:  # Steam
+                if ext.get("external_game_source") == 1:  # Steam
                     try:
                         result["steam_app_id"] = int(ext.get("uid"))
                         break
