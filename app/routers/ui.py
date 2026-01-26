@@ -2,6 +2,7 @@
 UI Router - Web interface endpoints for Repackarr.
 """
 import json
+import logging
 import asyncio
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Form, HTTPException
@@ -17,6 +18,7 @@ from app.config import get_settings
 from app.scheduler import scheduler
 from app.progress import progress_manager
 
+logger = logging.getLogger("repackarr")
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 settings = get_settings()
@@ -366,27 +368,38 @@ async def download_release(id: int, session: Session = Depends(get_session)):
     """
     Send the release magnet/link to the download client (qBittorrent).
     """
+    logger.info(f"Download requested for release {id}")
     release = session.get(Release, id)
     if not release:
+        logger.error(f"Release {id} not found")
         raise HTTPException(status_code=404, detail="Release not found")
         
     magnet = release.magnet_url or release.info_url
     if not magnet:
+        logger.warning(f"No magnet/info URL for release {id}")
         return HTMLResponse(
             '<span class="text-red-400 text-xs">No link available</span>'
         )
-        
+    
+    logger.info(f"Sending to qBittorrent: {magnet[:100]}...")
     qbit = QBitService()
     try:
         success = await qbit.add_torrent(magnet)
         if success:
+            logger.info(f"Successfully sent release {id} to qBittorrent")
             return HTMLResponse(
                 '<span class="text-emerald-400 text-xs font-bold flex items-center gap-1">✓ Sent to Client</span>'
             )
         else:
+            logger.error(f"Failed to send release {id} to qBittorrent")
             return HTMLResponse(
                 '<span class="text-red-400 text-xs">Failed to send</span>'
             )
+    except Exception as e:
+        logger.error(f"Exception downloading release {id}: {e}")
+        return HTMLResponse(
+            f'<span class="text-red-400 text-xs">Error: {str(e)[:50]}</span>'
+        )
     finally:
         await qbit.close()
 
