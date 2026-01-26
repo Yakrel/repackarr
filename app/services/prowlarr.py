@@ -278,47 +278,44 @@ class ProwlarrService:
         if not all(w in title_lower for w in query_words):
             return make_skip("Title mismatch", "title")
 
-        # 2. Platform Filter: Exclude console/mobile releases
-        excluded_platforms = ["ps5", "ps4", "ps3", "xbox", "switch", "macos", "android", "mac", "ios"]
+        # 2. Platform Filter: Check game's allowed platforms and filter accordingly
+        allowed_platforms = [p.strip().lower() for p in game.platform_filter.split(',')]
+        
+        # Console/mobile platforms that should always be excluded
+        excluded_platforms = ["ps5", "ps4", "ps3", "xbox", "switch", "android", "ios"]
         if any(p in title_lower for p in excluded_platforms):
-            return make_skip("Platform excluded", "platform")
+            return make_skip("Platform excluded (console/mobile)", "platform")
+        
+        # Check for Linux/Wine releases if only Windows is allowed
+        if "windows" in allowed_platforms and "linux" not in allowed_platforms:
+            # Filter out Wine and Linux-specific releases
+            linux_indicators = ["wine", "linux", "[l]", " l ", "proton"]
+            # But allow releases that explicitly mention Windows
+            windows_indicators = ["windows", "win64", "win32", "[w]", " w "]
+            
+            has_linux_indicator = any(ind in title_lower for ind in linux_indicators)
+            has_windows_indicator = any(ind in title_lower for ind in windows_indicators)
+            
+            # If it has Linux indicators and no Windows indicators, skip it
+            if has_linux_indicator and not has_windows_indicator:
+                return make_skip("Platform excluded (Linux/Wine, only Windows allowed)", "platform")
+        
+        # Check for macOS if not allowed
+        if "macos" not in allowed_platforms and "mac" not in allowed_platforms:
+            macos_indicators = ["macos", "mac ", "osx"]
+            if any(ind in title_lower for ind in macos_indicators):
+                return make_skip("Platform excluded (macOS)", "platform")
 
         # 3. Keyword Filter: Exclude unwanted content types
         if any(k in title_lower for k in settings.ignored_keywords_list):
             return make_skip("Ignored keyword match", "keyword")
             
-        # 4. Extract Remote Version
-        remote_version = extract_version(title)
-        is_upgrade = False
-        reason = "date"
+        # 4. Date-based filtering only (version filtering removed as unreliable)
+        # Only use upload date to determine if this is an upgrade
+        if not is_newer_date:
+            return make_skip("Date not newer", "older")
         
-        # 5. Determine if this is an upgrade
-        if game.current_version and remote_version:
-            comparison = compare_versions(game.current_version, remote_version)
-            if comparison == 1:
-                is_upgrade = True
-                reason = f"version (v{remote_version} > v{game.current_version})"
-            elif comparison in (-1, 0):
-                # Same or older version, skip
-                return make_skip(f"Version not newer (v{remote_version} <= v{game.current_version})", "older")
-            else:
-                # Comparison failed, fallback to date
-                if is_newer_date:
-                    is_upgrade = True
-                else:
-                    return make_skip("Date not newer", "older")
-        else:
-            # Fallback to date if version is missing
-            if is_newer_date:
-                is_upgrade = True
-            else:
-                 return make_skip("Date not newer", "older")
-
-        if not is_upgrade:
-            # Should be covered above, but just in case
-            return make_skip("Not an upgrade", "older")
-
-        # 6. Check for Duplicates
+        # 5. Check for Duplicates
         existing = session.exec(
             select(Release).where(
                 Release.raw_title == title,
@@ -329,8 +326,11 @@ class ProwlarrService:
         if existing:
             return make_skip("Already exists in database", "duplicate")
 
+        # 6. Extract version for display purposes only (not used for filtering)
+        remote_version = extract_version(title)
+
         # 7. Create and return release
-        logger.info(f"New release for {game.title}: {title} [{reason}]")
+        logger.info(f"New release for {game.title}: {title} [newer date]")
         
         return Release(
             game_id=game.id,
