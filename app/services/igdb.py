@@ -91,8 +91,8 @@ class IGDBService:
             }
 
             # Search for game with cover and external game IDs (Steam)
-            # Removed category filter to allow Bundles (3), Expansions, etc.
-            query = f'fields name, cover.image_id, category, external_games.uid, external_games.category; search "{game_name}"; limit 5;'
+            # Note: external_games needs to be expanded with *
+            query = f'fields name, cover.image_id, category, external_games.*; search "{game_name}"; limit 5;'
             
             resp = await self.client.post(
                 f"{self.api_url}/games", 
