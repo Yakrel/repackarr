@@ -100,11 +100,12 @@ async def force_add_release(
     # Parse date
     upload_date = datetime.utcnow()
     if date and date != "N/A":
-        try:
-            # Date format from log is YYYY-MM-DD
-            upload_date = datetime.strptime(date, '%Y-%m-%d')
-        except:
-            pass
+        for fmt in ('%Y-%m-%d %H:%M', '%Y-%m-%d'):
+            try:
+                upload_date = datetime.strptime(date, fmt)
+                break
+            except ValueError:
+                continue
             
     # Extract version
     parsed_version = extract_version(title)
@@ -511,9 +512,13 @@ async def update_game_details(
     
     # Parse version date
     try:
-        parsed_date = datetime.strptime(version_date, '%Y-%m-%d')
+        # datetime-local sends YYYY-MM-DDTHH:MM
+        if 'T' in version_date:
+            parsed_date = datetime.fromisoformat(version_date)
+        else:
+            parsed_date = datetime.strptime(version_date, '%Y-%m-%d')
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Please use YYYY-MM-DD format.")
+        raise HTTPException(status_code=400, detail="Invalid date format. Please use YYYY-MM-DD HH:mm format.")
     
     # Update game fields
     game.title = title.strip().title()
@@ -625,9 +630,12 @@ async def add_manual_game(
     
     # Parse version date
     try:
-        parsed_date = datetime.strptime(version_date, '%Y-%m-%d')
+        if 'T' in version_date:
+            parsed_date = datetime.fromisoformat(version_date)
+        else:
+            parsed_date = datetime.strptime(version_date, '%Y-%m-%d')
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD HH:mm")
     
     # Check if game already exists
     existing_game = session.exec(
@@ -726,7 +734,7 @@ async def get_game_skipped_releases(
             reason_class = "text-yellow-400" if "ignored" in skip.get("reason", "").lower() else "text-dark-300"
             title = skip.get('title', 'N/A')
             title_display = title[:80] + "..." if len(title) > 80 else title
-            
+
             rows.append(f"""
                 <tr class="border-b border-dark-700/50 hover:bg-dark-700/30">
                     <td class="py-3 text-sm text-dark-200 break-words" title="{title}">{title_display}</td>

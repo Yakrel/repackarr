@@ -77,7 +77,7 @@ class Release(ReleaseBase, table=True):
     @property
     def display_date(self) -> str:
         """Format upload date for display."""
-        return self.upload_date.strftime('%Y-%m-%d')
+        return self.upload_date.strftime('%Y-%m-%d %H:%M')
     
     @property
     def download_link(self) -> Optional[str]:

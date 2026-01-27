@@ -245,7 +245,7 @@ class ProwlarrService:
                 "game_id": game.id,
                 "game_title": game.title,
                 "title": title,
-                "date": upload_date.strftime('%Y-%m-%d') if upload_date else "N/A",
+                "date": upload_date.strftime('%Y-%m-%d %H:%M') if upload_date else "N/A",
                 "reason": reason_text,
                 "category": skip_category,  # For grouping: "older", "platform", "keyword", etc.
                 "indexer": indexer,

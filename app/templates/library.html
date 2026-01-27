@@ -134,7 +134,11 @@
                     
                     <!-- Version Date -->
                     <td class="px-6 py-4 hidden lg:table-cell">
-                        <span class="font-mono text-sm text-dark-300">{{ game.current_version_date.strftime('%Y-%m-%d') }}</span>
+                                                <svg class="w-4 h-4 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <span class="font-mono text-sm text-dark-300">{{ game.current_version_date.strftime('%Y-%m-%d %H:%M') }}</span>
+                            </div>
                     </td>
                     
                     <!-- Status Toggle -->
@@ -168,7 +172,7 @@
                     <td class="px-6 py-4">
                         <div class="flex items-center justify-center gap-1">
                             <!-- Edit Button -->
-                            <button onclick='showEditGameModal({{ game.id }}, {{ game.title|tojson }}, {{ game.search_query|tojson }}, "{{ game.current_version_date.strftime('%Y-%m-%d') }}", {{ (game.current_version or '')|tojson }}, {{ game.platform_filter|tojson }})'
+                            <button onclick='showEditGameModal({{ game.id }}, {{ game.title|tojson }}, {{ game.search_query|tojson }}, "{{ game.current_version_date.strftime("%Y-%m-%dT%H:%M") }}", {{ (game.current_version or '')|tojson }}, {{ game.platform_filter|tojson }})'
                                     class="p-2 rounded-lg text-dark-400 hover:text-brand-400 hover:bg-brand-500/10 transition"
                                     title="Edit game details">
                                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -233,7 +237,7 @@
             <!-- Version Date -->
             <div>
                 <label for="edit-game-date" class="block text-sm font-medium text-dark-200 mb-2">Version Date</label>
-                <input type="date" 
+                <input type="datetime-local" 
                        id="edit-game-date"
                        name="version_date" 
                        required
@@ -336,7 +340,7 @@
             <!-- Version Date -->
             <div>
                 <label for="add-game-date" class="block text-sm font-medium text-dark-200 mb-2">Version Date</label>
-                <input type="date" 
+                <input type="datetime-local" 
                        id="add-game-date"
                        name="version_date" 
                        required
