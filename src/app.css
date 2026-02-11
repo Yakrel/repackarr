@@ -1,0 +1,29 @@
+@import 'tailwindcss';
+
+:root {
+	--color-dark-50: #f8fafc;
+	--color-dark-100: #e2e8f0;
+	--color-dark-200: #cbd5e1;
+	--color-dark-300: #94a3b8;
+	--color-dark-400: #64748b;
+	--color-dark-500: #475569;
+	--color-dark-600: #334155;
+	--color-dark-700: #1e293b;
+	--color-dark-800: #0f172a;
+	--color-dark-900: #020617;
+}
+
+@keyframes slide-in {
+	from {
+		transform: translateX(100%);
+		opacity: 0;
+	}
+	to {
+		transform: translateX(0);
+		opacity: 1;
+	}
+}
+
+.animate-slide-in {
+	animation: slide-in 0.3s ease-out;
+}

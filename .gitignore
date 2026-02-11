@@ -1,0 +1,29 @@
+# Environment
+.env
+
+# Logs
+logs/
+
+# Database
+data/
+*.db
+*.db-journal
+*.db-wal
+
+# Dependencies
+node_modules/
+
+# Build
+build/
+.svelte-kit/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
