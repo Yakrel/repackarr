@@ -44,9 +44,9 @@ function getVersionScore(
 	if (!currentVersion) return { score: 26, state: 'unknown' };
 
 	const cmp = compareVersions(currentVersion, parsedVersion);
-	if (cmp === 1) return { score: 40, state: 'newer' };
+	if (cmp === -1) return { score: 40, state: 'newer' };
 	if (cmp === 0) return { score: 22, state: 'same' };
-	if (cmp === -1) return { score: 0, state: 'older' };
+	if (cmp === 1) return { score: 0, state: 'older' };
 	return { score: 12, state: 'unknown' };
 }
 
@@ -87,7 +87,7 @@ export const load: PageServerLoad = async () => {
 		}
 
 		const cmp = compareVersions(currentLatest, rel.parsedVersion);
-		if (cmp === 1) {
+		if (cmp === -1) {
 			latestVersionByGame.set(rel.gameId, rel.parsedVersion);
 		}
 	}
@@ -148,7 +148,7 @@ export const load: PageServerLoad = async () => {
 		let hasNewerVersionAvailable = false;
 		if (hasOwnedVersion && effectiveCurrentVersion && latestVersion) {
 			hasNewerVersionAvailable =
-				compareVersions(effectiveCurrentVersion, latestVersion) === 1;
+				compareVersions(effectiveCurrentVersion, latestVersion) === -1;
 		}
 		const versionScore = hasOwnedVersion
 			? version.score
@@ -163,12 +163,12 @@ export const load: PageServerLoad = async () => {
 			: isTopVersionCandidate;
 		const recommendationLabel = hasOwnedVersion
 			? version.state === 'newer'
-				? 'Newer than owned version'
+				? 'Newer Version'
 				: !hasNewerVersionAvailable && version.state === 'same'
-					? 'Best same-version match'
+					? 'Recommended'
 					: null
 			: isTopVersionCandidate
-				? 'Best available version'
+				? 'Recommended'
 				: null;
 		const recommendationReason = recommendationLabel
 			? [
@@ -184,7 +184,7 @@ export const load: PageServerLoad = async () => {
 		grouped[game.id].releases.push({
 			...rel,
 			recommendationScore,
-			recommendationTier: 'low',
+			recommendationTier: shouldRecommend ? (version.state === 'newer' ? 'high' : 'medium') : 'low',
 			confidenceScore,
 			freshnessScore,
 			popularityScore,

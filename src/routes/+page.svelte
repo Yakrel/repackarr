@@ -288,19 +288,12 @@
 											{#if release.parsedVersion}
 												• v{release.parsedVersion}
 											{/if}
-											{#if release.recommendationTier === 'high'}
+											{#if release.recommendationTier === 'high' || release.recommendationTier === 'medium'}
 												<span
 													class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/15 text-[10px] font-semibold text-emerald-300"
 													title={`${release.recommendationReason || 'Scored recommendation'} • Score ${release.recommendationScore} • Version ${release.versionState}`}
 												>
 													Recommended
-												</span>
-											{:else if release.recommendationTier === 'medium'}
-												<span
-													class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded border border-blue-500/40 bg-blue-500/15 text-[10px] font-semibold text-blue-300"
-													title={`${release.recommendationReason || 'Scored recommendation'} • Score ${release.recommendationScore} • Version ${release.versionState}`}
-												>
-													Good Match
 												</span>
 											{/if}
 										</p>

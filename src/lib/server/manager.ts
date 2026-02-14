@@ -8,20 +8,27 @@ import { logger, logError } from './logger.js';
 
 /**
  * Syncs game library from qBittorrent
- * Fetches torrents from qBit and updates local database
- * @returns Number of games synced
  */
-export async function runSyncLibrary(): Promise<number> {
+export async function runSyncLibrary(currentProgress?: { start: number, total: number }): Promise<number> {
 	logger.info('Starting library sync from qBittorrent...');
 
 	try {
-		await progressManager.startScan('Syncing', 1);
-		await progressManager.update(0, 'Connecting to qBittorrent...');
+		if (currentProgress) {
+			await progressManager.update(currentProgress.start, 'Connecting to qBittorrent...');
+		} else {
+			await progressManager.startScan('Syncing', 1);
+			await progressManager.update(0, 'Connecting to qBittorrent...');
+		}
 
 		const qbit = new QBitService();
 		const synced = await qbit.syncGames();
 
-		await progressManager.update(1, 'Library sync complete');
+		if (currentProgress) {
+			await progressManager.update(currentProgress.start + 1, 'Library sync complete');
+		} else {
+			await progressManager.update(1, 'Library sync complete');
+		}
+		
 		logger.info(`Library sync completed. ${synced} game(s) processed.`);
 		return synced;
 	} catch (error) {
@@ -32,10 +39,8 @@ export async function runSyncLibrary(): Promise<number> {
 
 /**
  * Searches Prowlarr for updates to monitored games
- * Scans all monitored games and saves results to database
- * @returns Number of games scanned
  */
-export async function runSearchUpdates(): Promise<number> {
+export async function runSearchUpdates(currentProgress?: { start: number, total: number }): Promise<number> {
 	const startTime = Date.now();
 	logger.info('Starting Prowlarr update search...');
 
@@ -54,35 +59,54 @@ export async function runSearchUpdates(): Promise<number> {
 
 		scanned = monitoredGames.length;
 		logger.info(`Scanning ${scanned} monitored game(s)...`);
-		await progressManager.startScan('Searching', scanned);
-
-		for (let i = 0; i < monitoredGames.length; i++) {
-			const game = monitoredGames[i];
-			await progressManager.update(i, `Searching: ${game.title}`);
-
-			try {
-				const res = await searchForGame(game.id);
-				totalFound += res.totalFound;
-				totalAdded += res.added;
-
-				if (res.error) {
-					logger.warn(`Search error for ${game.title}: ${res.error}`);
-					scanDetails.push(`${game.title}: ${res.error}`);
-				}
-				if (res.skipped.length > 0) {
-					allSkipped.push({
-						game: game.title,
-						game_id: game.id,
-						items: res.skipped
-					});
-				}
-			} catch (error) {
-				logError(`Exception while searching for ${game.title}`, error);
-				scanDetails.push(`${game.title}: Exception ${String(error)}`);
-			}
+		
+		if (!currentProgress) {
+			await progressManager.startScan('Searching', scanned);
 		}
 
-		await progressManager.update(scanned, 'Search complete');
+		// Process in parallel with concurrency limit
+		const concurrencyLimit = 5;
+		const chunks = [];
+		for (let i = 0; i < monitoredGames.length; i += concurrencyLimit) {
+			chunks.push(monitoredGames.slice(i, i + concurrencyLimit));
+		}
+
+		let processedCount = 0;
+		const startOffset = currentProgress ? currentProgress.start : 0;
+
+		for (const chunk of chunks) {
+			await Promise.all(
+				chunk.map(async (game) => {
+					try {
+						const res = await searchForGame(game.id);
+						totalFound += res.totalFound;
+						totalAdded += res.added;
+
+						if (res.error) {
+							logger.warn(`Search error for ${game.title}: ${res.error}`);
+							scanDetails.push(`${game.title}: ${res.error}`);
+						}
+						if (res.skipped.length > 0) {
+							allSkipped.push({
+								game: game.title,
+								game_id: game.id,
+								items: res.skipped
+							});
+						}
+					} catch (error) {
+						logError(`Exception while searching for ${game.title}`, error);
+						scanDetails.push(`${game.title}: Exception ${String(error)}`);
+					} finally {
+						processedCount++;
+						await progressManager.update(startOffset + processedCount, `Searched: ${game.title}`);
+					}
+				})
+			);
+		}
+
+		if (!currentProgress) {
+			await progressManager.update(scanned, 'Search complete');
+		}
 	} catch (error) {
 		logError('Update search global failed', error);
 		scanDetails.push(`Global Error: ${String(error)}`);
@@ -116,7 +140,6 @@ export async function runSearchUpdates(): Promise<number> {
 
 /**
  * Runs a full scan cycle: sync library + search for updates
- * This is the main scheduled task that runs periodically
  */
 export async function runScanCycle(): Promise<void> {
 	const startTime = Date.now();
@@ -124,8 +147,21 @@ export async function runScanCycle(): Promise<void> {
 	logger.info('Starting full scan cycle...');
 
 	try {
-		await runSyncLibrary();
-		await runSearchUpdates();
+		const monitoredGames = db
+			.select()
+			.from(games)
+			.where(eq(games.status, 'monitored'))
+			.all();
+
+		// Total steps = 1 (Library Sync) + N (Monitored Games Search)
+		const totalSteps = 1 + monitoredGames.length;
+		await progressManager.startScan('Full Scan', totalSteps);
+
+		await runSyncLibrary({ start: 0, total: totalSteps });
+		await runSearchUpdates({ start: 1, total: totalSteps });
+		
+		// Wait a moment so user can see 100%
+		await new Promise(resolve => setTimeout(resolve, 1000));
 	} catch (error) {
 		logError('Full scan cycle encountered an error', error);
 	} finally {

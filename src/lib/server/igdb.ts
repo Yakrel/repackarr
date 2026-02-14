@@ -5,6 +5,10 @@ import { logger } from './logger.js';
 let accessToken: string | null = null;
 let tokenExpiry = 0;
 
+// Simple in-memory cache for autocomplete results
+const autocompleteCache = new Map<string, { data: any, timestamp: number }>();
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
 /**
  * Retrieves or refreshes IGDB OAuth token
  * @returns Access token or null if authentication failed
@@ -72,7 +76,7 @@ export async function getGameMetadata(gameName: string): Promise<GameMetadata | 
 		const headers = await getHeaders();
 		if (!headers) return null;
 
-		const query = `fields name, cover.image_id, category, external_games.*; search "${gameName}"; limit 5;`;
+		const query = `fields name, cover.image_id, category, platforms, external_games.*; search "${gameName}"; limit 5;`;
 
 		const resp = await fetch('https://api.igdb.com/v4/games', {
 			method: 'POST',
@@ -99,7 +103,8 @@ export async function getGameMetadata(gameName: string): Promise<GameMetadata | 
 		const slashBase = gameName.split('/')[0]?.trim();
 		if (slashBase) queryVariants.add(normalizeForMatch(slashBase));
 
-		const scoreMatch = (name: string): number => {
+		const scoreMatch = (g: IGDBGame): number => {
+			const name = g.name || '';
 			const normalizedName = normalizeForMatch(name);
 			let bestScore = 0;
 			for (const variant of queryVariants) {
@@ -111,15 +116,23 @@ export async function getGameMetadata(gameName: string): Promise<GameMetadata | 
 					bestScore = Math.max(bestScore, 60);
 				}
 			}
+			
+			// Boost score if it's a PC game
+			if (g.platforms?.some(p => (typeof p === 'object' ? p.id === 6 : p === 6))) {
+				bestScore += 10;
+			}
+			
 			return bestScore;
 		};
 
 		const rankedResults = results
-			.map((g) => ({ game: g, score: scoreMatch(g.name || '') }))
+			.map((g) => ({ game: g, score: scoreMatch(g) }))
 			.sort((a, b) => b.score - a.score);
 		const target = rankedResults[0]?.game || results[0];
 
 		const result: GameMetadata = {
+			name: target.name,
+			igdbId: target.id,
 			coverUrl: undefined,
 			steamAppId: undefined
 		};
@@ -143,7 +156,7 @@ export async function getGameMetadata(gameName: string): Promise<GameMetadata | 
 			}
 		}
 
-		if (result.coverUrl || result.steamAppId) {
+		if (result.name || result.coverUrl || result.steamAppId) {
 			logger.info(`IGDB metadata for ${gameName}: ${JSON.stringify(result)}`);
 			return result;
 		}
@@ -158,18 +171,37 @@ export async function getGameMetadata(gameName: string): Promise<GameMetadata | 
  * Searches IGDB for games matching query (autocomplete)
  * Returns up to 10 results with game name and release year
  * @param query - Search query string
+ * @param platform - Platform filter (Windows, Linux, macOS)
  * @returns Array of game suggestions with display names
  */
 export async function searchGamesAutocomplete(
-	query: string
+	query: string,
+	platform: string = 'Windows'
 ): Promise<Array<{ name: string; display: string }>> {
 	if (!query || query.length < 2 || !isIgdbEnabled()) return [];
+
+	const cacheKey = `${query.toLowerCase()}:${platform}`;
+	const cached = autocompleteCache.get(cacheKey);
+	if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+		return cached.data;
+	}
 
 	try {
 		const headers = await getHeaders();
 		if (!headers) return [];
 
-		const body = `fields name, first_release_date; search "${query}"; limit 10;`;
+		// Map UI platform names to IGDB platform IDs
+		const platformMap: Record<string, number[]> = {
+			'Windows': [6],
+			'Linux': [3],
+			'macOS': [14],
+			'Windows,Linux': [6, 3]
+		};
+		
+		const platformIds = platformMap[platform] || [6];
+		const platformFilter = `where platforms = (${platformIds.join(',')});`;
+
+		const body = `fields name, first_release_date, platforms; search "${query}"; ${platformFilter} limit 10;`;
 		const resp = await fetch('https://api.igdb.com/v4/games', {
 			method: 'POST',
 			headers,
@@ -179,7 +211,7 @@ export async function searchGamesAutocomplete(
 		if (!resp.ok) return [];
 
 		const results: IGDBGame[] = await resp.json();
-		return results.map((game) => {
+		const suggestions = results.map((game) => {
 			const name = game.name || '';
 			let display = name;
 			if (game.first_release_date) {
@@ -192,6 +224,11 @@ export async function searchGamesAutocomplete(
 			}
 			return { name, display };
 		});
+
+		// Store in cache
+		autocompleteCache.set(cacheKey, { data: suggestions, timestamp: Date.now() });
+		
+		return suggestions;
 	} catch (error) {
 		logger.error(`IGDB autocomplete error: ${error}`);
 		return [];

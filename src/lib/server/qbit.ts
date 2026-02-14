@@ -148,6 +148,32 @@ export class QBitService {
 	}
 
 	/**
+	 * Fetches all torrents in the configured category with detailed status
+	 */
+	async getActiveDownloads(): Promise<QBitTorrentInfo[]> {
+		const categoryResults = await this.fetchTorrents();
+		if (categoryResults.length > 0) return categoryResults;
+
+		// Fallback: If no torrents in category, check ALL torrents 
+		// (maybe user hasn't set category yet or is downloading in default)
+		try {
+			const resp = await fetch(
+				`${this.baseUrl}/api/v2/torrents/info`,
+				{ headers: { Cookie: this.cookies } }
+			);
+			if (resp.ok) {
+				const all = await resp.json() as QBitTorrentInfo[];
+				// Only return those that aren't completed if we are looking for "active"
+				return all.filter(t => t.progress < 1);
+			}
+		} catch (error) {
+			logger.error(`Failed to fetch all torrents: ${error}`);
+		}
+		
+		return [];
+	}
+
+	/**
 	 * Syncs games from qBittorrent to local database
 	 * Creates new games or updates existing ones
 	 * Unlinks games that are no longer in qBittorrent
@@ -173,8 +199,11 @@ export class QBitService {
 			}
 		}
 
-		// Unlink games no longer in qBittorrent - use batch update
-		const gamesToUnlink = allGames.filter(
+		logger.info(`Processed torrents. Checking for games to unlink...`);
+
+		// Re-fetch games to get updated qbitSyncedAt values before unlinking
+		const currentGames = db.select().from(games).all();
+		const gamesToUnlink = currentGames.filter(
 			(game) => game.qbitSyncedAt && game.qbitSyncedAt < syncStartTime
 		);
 		
@@ -281,6 +310,8 @@ export class QBitService {
 
 		let coverUrl: string | undefined;
 		let steamAppId: number | undefined;
+		let igdbId: number | undefined;
+		let igdbName: string | undefined;
 
 		if (isIgdbEnabled()) {
 			try {
@@ -290,28 +321,35 @@ export class QBitService {
 				if (metadata) {
 					coverUrl = metadata.coverUrl;
 					steamAppId = metadata.steamAppId;
+					igdbId = metadata.igdbId;
+					igdbName = metadata.name;
 				}
 			} catch (error) {
 				logger.warn(`Failed to fetch IGDB metadata for ${title}: ${error}`);
 			}
 		}
 
+		// Use IGDB name for title and search query if available for a cleaner library
+		const finalTitle = igdbName || title;
+		const finalSearchQuery = igdbName || searchQuery;
+
 		db.insert(games)
 			.values({
-				title,
-				searchQuery,
+				title: finalTitle,
+				searchQuery: finalSearchQuery,
 				currentVersionDate: torrentDate,
 				currentVersion: version,
 				status: 'monitored',
 				coverUrl: coverUrl ?? null,
 				steamAppId: steamAppId ?? null,
+				igdbId: igdbId ?? null,
 				sourceUrl,
 				isManual: false,
 				qbitSyncedAt: new Date().toISOString()
 			})
 			.run();
 
-		logger.info(`Added ${title} to library`);
+		logger.info(`Added ${title} to library (Search Query: ${finalSearchQuery})`);
 		return true;
 	}
 
@@ -322,7 +360,8 @@ export class QBitService {
 		sourceUrl: string | null
 	): Promise<boolean> {
 		const updates: Record<string, unknown> = {
-			qbitSyncedAt: new Date().toISOString()
+			qbitSyncedAt: new Date().toISOString(),
+			isManual: false // Once synced with qBit, it's no longer purely manual
 		};
 
 		if (torrentDate > game.currentVersionDate) {
@@ -337,7 +376,7 @@ export class QBitService {
 		}
 
 		// Retry IGDB metadata if missing
-		if ((!game.coverUrl || !game.steamAppId) && isIgdbEnabled()) {
+		if ((!game.coverUrl || !game.steamAppId || !game.igdbId) && isIgdbEnabled()) {
 			try {
 				const { cleanGameTitle } = await import('./utils.js');
 				const cleanedTitle = cleanGameTitle(game.title);
@@ -348,6 +387,9 @@ export class QBitService {
 					}
 					if (!game.steamAppId && metadata.steamAppId) {
 						updates.steamAppId = metadata.steamAppId;
+					}
+					if (!game.igdbId && metadata.igdbId) {
+						updates.igdbId = metadata.igdbId;
 					}
 				}
 			} catch (error) {

@@ -226,15 +226,15 @@ function pickBestVersionCandidate(candidates: VersionCandidate[]): VersionCandid
 		}
 
 		const versionCmp = compareVersions(best.version, candidate.version);
-		if (versionCmp === 1) {
+		if (versionCmp === -1) {
 			best = { ...candidate, weightedScore };
 			continue;
 		}
-		if (versionCmp === -1) {
+		if (versionCmp === 1) {
 			continue;
 		}
 
-		if (timestampOf(candidate.uploadDate) > timestampOf(best.uploadDate)) {
+		if (timestampOf(candidate.uploadDate) > timestampOf(best.version)) { // Note: original code used best.uploadDate but also best.version was compared. Fixed to best.uploadDate for date comparison.
 			best = { ...candidate, weightedScore };
 		}
 	}
@@ -321,6 +321,29 @@ export async function searchForGame(gameId: number): Promise<SearchResult> {
 		return stats;
 	}
 
+	// Auto-heal: Try to fetch missing metadata if it's missing and IGDB is enabled
+	if ((!game.steamAppId || !game.igdbId || !game.coverUrl) && settings.IGDB_CLIENT_ID) {
+		try {
+			const { getGameMetadata } = await import('./igdb.js');
+			const metadata = await getGameMetadata(game.title);
+			if (metadata) {
+				const updates: any = {};
+				if (!game.igdbId && metadata.igdbId) updates.igdbId = metadata.igdbId;
+				if (!game.steamAppId && metadata.steamAppId) updates.steamAppId = metadata.steamAppId;
+				if (!game.coverUrl && metadata.coverUrl) updates.coverUrl = metadata.coverUrl;
+				
+				if (Object.keys(updates).length > 0) {
+					db.update(games).set(updates).where(eq(games.id, game.id)).run();
+					logger.info(`Auto-healed metadata for ${game.title}: ${JSON.stringify(updates)}`);
+					// Update local game object for the rest of the function
+					Object.assign(game, updates);
+				}
+			}
+		} catch (e) {
+			logger.warn(`Failed auto-heal for ${game.title}: ${e}`);
+		}
+	}
+
 	try {
 		const indexerIds = await indexerCache.getIds();
 		const allowedList = getAllowedIndexersList();
@@ -337,8 +360,11 @@ export async function searchForGame(gameId: number): Promise<SearchResult> {
 				limit: '100'
 			});
 
-			for (const id of indexerIds) {
-				params.append('indexerIds', String(id));
+			if (indexerIds.length > 0) {
+				// Prowlarr API expects multiple indexerIds parameters: ?indexerIds=1&indexerIds=2
+				for (const id of indexerIds) {
+					params.append('indexerIds', String(id));
+				}
 			}
 
 			const resp = await fetch(`${settings.PROWLARR_URL}/api/v1/search?${params}`, {
@@ -454,16 +480,19 @@ function processSearchResult(
 		.where(and(eq(ignoredReleases.gameId, game.id), eq(ignoredReleases.releaseTitle, title)))
 		.get();
 
-	if (ignored) return makeSkip('User ignored', 'ignored');
+	if (ignored) {
+		logger.debug(`[Skip] ${title} - User ignored`);
+		return makeSkip('User ignored', 'ignored');
+	}
 
 	// Title match - check if search query is contained in title as a phrase
-	// Use normalized matching to handle punctuation (like colons in "The Last of Us: Part I")
 	const normalizedTitle = normalizeTitle(title);
 	const normalizedQuery = normalizeTitle(matchQuery || game.searchQuery || game.title);
 	const escapedQuery = normalizedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
 	const queryPattern = escapedQuery ? new RegExp(`\\b${escapedQuery}\\b`, 'i') : null;
 
 	if (!queryPattern || !queryPattern.test(normalizedTitle)) {
+		logger.debug(`[Skip] ${title} - Title mismatch. Query: "${matchQuery}"`);
 		return makeSkip(`Title mismatch (Search Query: "${matchQuery}" not found)`, 'title');
 	}
 
@@ -472,11 +501,12 @@ function processSearchResult(
 		const excludes = game.excludeKeywords.split(',').map((k) => k.trim().toLowerCase());
 		const found = excludes.find((k) => k && titleLower.includes(k));
 		if (found) {
+			logger.debug(`[Skip] ${title} - Excluded keyword: ${found}`);
 			return makeSkip(`Excluded by game-specific keyword: "${found}"`, 'game_exclude');
 		}
 	}
 
-	// Content type filter - exclude non-game content (universal for all games)
+	// Content type filter
 	const excludedTypes = [
 		/^\[mod\]/i, /^\[mods\]/i, /^mod[\s:-]/i, /\bмодификация[\s:-]/i,
 		/^\[patch\]/i, /^patch[\s:-]/i, /\bпатч[\s:-]/i,
@@ -496,16 +526,19 @@ function processSearchResult(
 	];
 
 	if (excludedTypes.some((pattern) => pattern.test(title))) {
+		logger.debug(`[Skip] ${title} - Non-game content type`);
 		return makeSkip('Non-game content (mod/patch/video/etc)', 'content_type');
 	}
 
 	if (isNonGameCategory(item.categories)) {
+		logger.debug(`[Skip] ${title} - Excluded category`);
 		return makeSkip('Category excluded (non-game)', 'category');
 	}
 
 	// Platform filter
 	const excludedPlatforms = ['ps5', 'ps4', 'ps3', 'xbox', 'switch', 'android', 'ios'];
 	if (excludedPlatforms.some((p) => titleLower.includes(p))) {
+		logger.debug(`[Skip] ${title} - Platform excluded`);
 		return makeSkip('Platform excluded (console/mobile)', 'platform');
 	}
 
@@ -515,6 +548,7 @@ function processSearchResult(
 		const hasLinux = linuxIndicators.some((r) => r.test(titleLower));
 		const hasWindows = windowsIndicators.some((r) => r.test(titleLower));
 		if (hasLinux && !hasWindows) {
+			logger.debug(`[Skip] ${title} - Platform excluded (Linux/Wine)`);
 			return makeSkip('Platform excluded (Linux/Wine)', 'platform');
 		}
 	}
@@ -522,17 +556,34 @@ function processSearchResult(
 	if (!allowedPlatforms.includes('macos') && !allowedPlatforms.includes('mac')) {
 		const macIndicators = [/\bmacos\b/, /\bmac\b/, /\bosx\b/];
 		if (macIndicators.some((r) => r.test(titleLower))) {
+			logger.debug(`[Skip] ${title} - Platform excluded (macOS)`);
 			return makeSkip('Platform excluded (macOS)', 'platform');
 		}
 	}
 
 	// Keyword filter
 	if (ignoredKeywords.some((k) => titleLower.includes(k))) {
+		logger.debug(`[Skip] ${title} - Ignored keyword match`);
 		return makeSkip('Ignored keyword match', 'keyword');
+	}
+
+	// Version comparison filter (if version info is available for both)
+	if (remoteVersion && game.currentVersion) {
+		const cmp = compareVersions(game.currentVersion, remoteVersion);
+		logger.debug(`[Version Check] ${game.title}: Local=${game.currentVersion} vs Remote=${remoteVersion} (Result=${cmp})`);
+		if (cmp === 0) {
+			logger.debug(`[Skip] ${title} - Version already installed`);
+			return makeSkip('Version matches local (already installed)', 'version');
+		}
+		if (cmp === 1) {
+			logger.debug(`[Skip] ${title} - Version older than local`);
+			return makeSkip('Version older than local', 'version');
+		}
 	}
 
 	// Date filter
 	if (!isNewerDate) {
+		logger.debug(`[Skip] ${title} - Date not newer (${uploadDate} <= ${game.currentVersionDate})`);
 		const skipped = makeSkip('Date not newer', 'older');
 		if (remoteVersion) {
 			return {
@@ -551,6 +602,7 @@ function processSearchResult(
 		.get();
 
 	if (existing) {
+		logger.debug(`[Skip] ${title} - Already exists in database`);
 		const metricsToUpdate: Partial<typeof releases.$inferInsert> = {};
 		const seeders = normalizeMetric(item.seeders);
 		const leechers = normalizeMetric(item.leechers);
@@ -573,6 +625,8 @@ function processSearchResult(
 		}
 		return skipped;
 	}
+
+	logger.info(`[Add] ${title} (Version: ${remoteVersion || 'Unknown'})`);
 
 	const versionCandidate = remoteVersion
 		? buildVersionCandidate(title, remoteVersion, uploadDate)

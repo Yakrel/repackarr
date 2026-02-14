@@ -35,11 +35,43 @@
 	let suggestions = $state<Array<{ name: string; display: string }>>([]);
 	let showSuggestions = $state(false);
 	let autocompleteTimeout: ReturnType<typeof setTimeout> | null = null;
+	let abortController: AbortController | null = null;
+	const localCache = new Map<string, Array<{ name: string; display: string }>>();
+	let isSearching = $state(false);
 	
 	// Edit game autocomplete state
 	let editSuggestions = $state<Array<{ name: string; display: string }>>([]);
 	let showEditSuggestions = $state(false);
 	let editAutocompleteTimeout: ReturnType<typeof setTimeout> | null = null;
+	let editAbortController: AbortController | null = null;
+	const editLocalCache = new Map<string, Array<{ name: string; display: string }>>();
+	let isEditingSearching = $state(false);
+
+	// qBittorrent status polling
+	let qbitStatus = $state<Record<number, {
+		progress: number;
+		state: string;
+		dlspeed: string;
+		eta: string;
+		rawEta: number;
+	}>>({});
+
+	async function fetchQbitStatus() {
+		try {
+			const resp = await fetch('/api/qbit/status');
+			if (resp.ok) {
+				qbitStatus = await resp.json();
+			}
+		} catch (error) {
+			console.error('Failed to fetch qbit status:', error);
+		}
+	}
+
+	$effect(() => {
+		fetchQbitStatus();
+		const interval = setInterval(fetchQbitStatus, 5000);
+		return () => clearInterval(interval);
+	});
 	
 	// Helper functions for modal close
 	function closeAddModal() {
@@ -119,7 +151,7 @@
 		addingGame = true;
 
 		const formData = new FormData(e.target as HTMLFormElement);
-		const selectedMode = formData.get('mode') as string;
+		const searchNow = formData.get('search_now') === 'on';
 		
 		try {
 			const resp = await fetch('?/addGame', {
@@ -131,26 +163,25 @@
 			
 			if (result.type === 'success') {
 				const foundCount = result.data?.foundReleases || 0;
+				const redirectToDashboard = result.data?.redirectToDashboard;
+				const message = result.data?.message;
 				
-				if (selectedMode === 'download_now' && foundCount > 0) {
-					toastStore.success(`Game added! Found ${foundCount} releases. You can see them on the Dashboard.`, 'Add Game');
-					setTimeout(() => {
-						goto('/');
-					}, 2000);
-				} else if (selectedMode === 'download_now') {
-					toastStore.info('Game added! We are searching for releases in the background. They will appear on your Dashboard soon.', 'Add Game');
-					setTimeout(() => {
-						goto('/');
-					}, 3000);
+				if (redirectToDashboard) {
+					const successMsg = foundCount > 0 
+						? `Game added! Found ${foundCount} releases. You can see them on the Dashboard.`
+						: 'Game added! Searching for releases in the background...';
+					
+					toastStore.success(successMsg, 'Add Game');
+					setTimeout(() => goto('/'), 1500);
 				} else {
-					toastStore.success('Game added to monitored list.', 'Add Game');
+					toastStore.info(message || 'Game added to monitored list.', 'Add Game');
+					showAddModal = false;
 					setTimeout(() => window.location.reload(), 1500);
 				}
 				
 				// Clear form
 				gameTitle = '';
 				searchQuery = '';
-				mode = 'download_now';
 				platformFilter = 'Windows';
 			} else if (result.type === 'failure') {
 				toastStore.error(result.data?.error || 'Failed to add game');
@@ -213,13 +244,12 @@
 	async function handleTitleInput(e: Event) {
 		const input = e.target as HTMLInputElement;
 		gameTitle = input.value;
+		const query = gameTitle.toLowerCase();
 		
-		// Auto-fill search query
 		if (gameTitle) {
 			searchQuery = gameTitle.toLowerCase();
 		}
 
-		// Debounce autocomplete
 		if (autocompleteTimeout) clearTimeout(autocompleteTimeout);
 		
 		if (gameTitle.length < 2) {
@@ -228,16 +258,52 @@
 			return;
 		}
 
-		autocompleteTimeout = setTimeout(async () => {
-			try {
-				const resp = await fetch(`/api/games/autocomplete?q=${encodeURIComponent(gameTitle)}`);
-				const data = await resp.json();
-				suggestions = data.suggestions || [];
-				showSuggestions = suggestions.length > 0;
-			} catch (error) {
-				console.error('Autocomplete error:', error);
+		// --- SMART PREDICTIVE FILTERING ---
+		// Find the closest prefix in our cache to show something INSTANTLY
+		let bestPrefix = "";
+		for (const key of localCache.keys()) {
+			const [keyQuery, keyPlatform] = key.split(':');
+			if (keyPlatform === platformFilter && query.startsWith(keyQuery)) {
+				if (keyQuery.length > bestPrefix.length) bestPrefix = keyQuery;
 			}
-		}, 300);
+		}
+
+		if (bestPrefix) {
+			const prefixResults = localCache.get(`${bestPrefix}:${platformFilter}`) || [];
+			const filtered = prefixResults.filter(s => s.name.toLowerCase().includes(query));
+			if (filtered.length > 0) {
+				suggestions = filtered;
+				showSuggestions = true;
+				// If we have an exact match in cache, we can skip the network call
+				if (localCache.has(`${query}:${platformFilter}`)) return;
+			}
+		}
+		// ----------------------------------
+
+		autocompleteTimeout = setTimeout(async () => {
+			if (abortController) abortController.abort();
+			abortController = new AbortController();
+			isSearching = true;
+
+			try {
+				const cacheKey = `${query}:${platformFilter}`;
+				const resp = await fetch(`/api/games/autocomplete?q=${encodeURIComponent(gameTitle)}&platform=${encodeURIComponent(platformFilter)}`, {
+					signal: abortController.signal
+				});
+				const data = await resp.json();
+				const newSuggestions = data.suggestions || [];
+				
+				suggestions = newSuggestions;
+				if (newSuggestions.length > 0) {
+					localCache.set(cacheKey, newSuggestions);
+				}
+				showSuggestions = suggestions.length > 0;
+			} catch (err: any) {
+				if (err.name !== 'AbortError') console.error('Autocomplete error:', err);
+			} finally {
+				isSearching = false;
+			}
+		}, 200);
 	}
 
 	function selectSuggestion(suggestion: { name: string; display: string }) {
@@ -250,8 +316,8 @@
 	async function handleEditTitleInput(e: Event) {
 		const input = e.target as HTMLInputElement;
 		const title = input.value;
+		const query = title.toLowerCase();
 		
-		// Debounce autocomplete
 		if (editAutocompleteTimeout) clearTimeout(editAutocompleteTimeout);
 		
 		if (title.length < 2) {
@@ -260,16 +326,48 @@
 			return;
 		}
 
-		editAutocompleteTimeout = setTimeout(async () => {
-			try {
-				const resp = await fetch(`/api/games/autocomplete?q=${encodeURIComponent(title)}`);
-				const data = await resp.json();
-				editSuggestions = data.suggestions || [];
-				showEditSuggestions = editSuggestions.length > 0;
-			} catch (error) {
-				console.error('Autocomplete error:', error);
+		// --- SMART PREDICTIVE FILTERING FOR EDIT ---
+		let bestPrefix = "";
+		for (const key of editLocalCache.keys()) {
+			if (query.startsWith(key)) {
+				if (key.length > bestPrefix.length) bestPrefix = key;
 			}
-		}, 300);
+		}
+
+		if (bestPrefix) {
+			const prefixResults = editLocalCache.get(bestPrefix) || [];
+			const filtered = prefixResults.filter(s => s.name.toLowerCase().includes(query));
+			if (filtered.length > 0) {
+				editSuggestions = filtered;
+				showEditSuggestions = true;
+				if (editLocalCache.has(query)) return;
+			}
+		}
+		// -------------------------------------------
+
+		editAutocompleteTimeout = setTimeout(async () => {
+			if (editAbortController) editAbortController.abort();
+			editAbortController = new AbortController();
+			isEditingSearching = true;
+
+			try {
+				const resp = await fetch(`/api/games/autocomplete?q=${encodeURIComponent(title)}`, {
+					signal: editAbortController.signal
+				});
+				const data = await resp.json();
+				const newSuggestions = data.suggestions || [];
+				
+				editSuggestions = newSuggestions;
+				if (newSuggestions.length > 0) {
+					editLocalCache.set(query, newSuggestions);
+				}
+				showEditSuggestions = editSuggestions.length > 0;
+			} catch (err: any) {
+				if (err.name !== 'AbortError') console.error('Autocomplete error:', err);
+			} finally {
+				isEditingSearching = false;
+			}
+		}, 200);
 	}
 
 	function selectEditSuggestion(suggestion: { name: string; display: string }) {
@@ -516,14 +614,56 @@
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 mb-1">
 											<div class="font-medium text-white text-sm">{game.cleanTitle}</div>
-											{#if game.isManual}
-												<span class="px-1.5 py-0.5 text-[10px] font-semibold text-amber-300 bg-amber-500/20 rounded border border-amber-500/30" title="Manually added">Manual</span>
-											{/if}
 											{#if game.qbitSyncedAt}
 												<span class="px-1.5 py-0.5 text-[10px] font-semibold text-blue-300 bg-blue-500/20 rounded border border-blue-500/30" title="Synced from qBittorrent">qBit</span>
+											{:else if game.isManual}
+												<span class="px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 bg-slate-500/10 rounded border border-slate-500/20" title="Manually added, not linked to qBittorrent">Manual</span>
 											{/if}
 										</div>
 										<div class="text-xs text-slate-400">{game.cleanSearchQuery}</div>
+
+										{#if qbitStatus[game.id]}
+											{@const status = qbitStatus[game.id]}
+											{@const isDownloading = status.state === 'downloading' || status.state === 'stalledDL'}
+											{@const isFinished = status.progress === 100 || status.state.includes('UP') || status.state === 'uploading'}
+											{@const friendlyState = status.state
+												.replace('stoppedDL', 'Paused')
+												.replace('stoppedUP', 'Finished')
+												.replace('downloading', 'Downloading')
+												.replace('stalledDL', 'Stalled')
+												.replace('uploading', 'Seeding')
+												.replace('metaDL', 'Fetching Metadata')
+												.replace(/_/g, ' ')}
+											<div class="mt-2 w-48 group/progress">
+												<div class="flex items-center justify-between text-[10px] mb-1">
+													<span class="font-bold uppercase tracking-wider {isDownloading ? 'text-blue-400' : isFinished ? 'text-emerald-400' : 'text-slate-400'}">
+														{friendlyState}
+													</span>
+													<span class="text-slate-300 font-mono">{status.progress}%</span>
+												</div>
+												<div class="h-1.5 w-full bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/30">
+													<div 
+														class="h-full rounded-full transition-all duration-700 ease-out {isDownloading ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)] animate-pulse' : isFinished ? 'bg-emerald-500' : 'bg-slate-500'}" 
+														style="width: {status.progress}%"
+													></div>
+												</div>
+												<div class="flex items-center justify-between text-[9px] mt-1.5 text-slate-500 font-semibold italic">
+													{#if status.state === 'downloading'}
+														<div class="flex items-center gap-1 text-blue-400/80">
+															<svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+															</svg>
+															{status.dlspeed}
+														</div>
+														<span class="text-slate-400">ETA: {status.eta}</span>
+													{:else if isFinished}
+														<span class="text-emerald-500/70">Ready to play</span>
+													{:else}
+														<span>{status.dlspeed}</span>
+													{/if}
+												</div>
+											</div>
+										{/if}
 									</div>
 								</div>
 							</td>
@@ -739,6 +879,31 @@
 				onsubmit={handleAddGame}
 				class="p-6 space-y-5"
 			>
+				<!-- Platform Selection -->
+				<div>
+					<label for="platform_filter" class="block text-sm font-medium text-slate-300 mb-2">
+						Platform
+					</label>
+					<div class="relative">
+						<select
+							id="platform_filter"
+							name="platform_filter"
+							bind:value={platformFilter}
+							class="w-full px-4 py-3 pr-10 bg-slate-900/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent transition-all appearance-none cursor-pointer"
+						>
+							<option value="Windows">Windows</option>
+							<option value="Linux">Linux</option>
+							<option value="Windows,Linux">Windows + Linux</option>
+						</select>
+						<!-- Dropdown Arrow Icon -->
+						<div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+							<svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+							</svg>
+						</div>
+					</div>
+				</div>
+
 				<!-- Title with Autocomplete -->
 				<div>
 					<label for="title" class="block text-sm font-medium text-slate-300 mb-2">
@@ -756,8 +921,27 @@
 							required
 							placeholder="e.g. Cyberpunk 2077, Baldur's Gate 3"
 							autocomplete="off"
-							class="w-full px-4 py-3 bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent transition-all"
+							class="w-full px-4 py-3 bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent transition-all pr-10"
 						/>
+						
+						<!-- Status Icon -->
+						<div class="absolute right-3 top-1/2 -translate-y-1/2">
+							{#if isSearching}
+								<svg class="animate-spin h-5 w-5 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+									<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+									<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+								</svg>
+							{:else if gameTitle.length >= 2 && suggestions.length > 0}
+								<svg class="h-5 w-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+								</svg>
+							{:else if gameTitle.length >= 2 && !isSearching}
+								<svg class="h-5 w-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+								</svg>
+							{/if}
+						</div>
+
 						{#if showSuggestions && suggestions.length > 0}
 							<div class="absolute z-10 w-full mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl max-h-64 overflow-y-auto">
 								{#each suggestions as suggestion}
@@ -806,65 +990,25 @@
 					<p class="text-xs text-slate-500 mt-1.5">Comma-separated keywords to skip for this game only</p>
 				</div>
 
-				<!-- Mode Selection -->
-				<fieldset class="space-y-3">
-					<legend class="block text-sm font-medium text-slate-300 mb-3">What do you want to do?</legend>
-					<div class="space-y-3">
-						<!-- Download Now -->
-						<label class="flex items-start gap-3 p-4 bg-slate-900/50 border-2 {mode === 'download_now' ? 'border-purple-500 bg-purple-500/5' : 'border-slate-600'} rounded-xl cursor-pointer hover:bg-slate-800/50 transition-all">
+				<!-- Options -->
+				<div class="space-y-3">
+					<label class="flex items-center gap-3 p-4 bg-slate-900/50 border border-slate-700/50 rounded-xl cursor-pointer hover:bg-slate-800/50 transition-all group">
+						<div class="relative flex items-center">
 							<input 
-								type="radio" 
-								name="mode" 
-								value="download_now" 
-								bind:group={mode}
-								class="mt-0.5 w-4 h-4 text-purple-600 border-slate-600 focus:ring-purple-500"
+								type="checkbox" 
+								name="search_now" 
+								checked={true}
+								class="peer h-5 w-5 cursor-pointer appearance-none rounded-md border border-slate-600 transition-all checked:border-purple-500 checked:bg-purple-500"
 							/>
-							<div class="flex-1">
-								<div class="font-medium text-white mb-1">Find and download now</div>
-								<div class="text-xs text-slate-400">Searches Prowlarr immediately and shows available releases on dashboard</div>
-							</div>
-						</label>
-
-						<!-- Track Only -->
-						<label class="flex items-start gap-3 p-4 bg-slate-900/50 border-2 {mode === 'track_only' ? 'border-purple-500 bg-purple-500/5' : 'border-slate-600'} rounded-xl cursor-pointer hover:bg-slate-800/50 transition-all">
-							<input 
-								type="radio" 
-								name="mode" 
-								value="track_only"
-								bind:group={mode}
-								class="mt-0.5 w-4 h-4 text-purple-600 border-slate-600 focus:ring-purple-500"
-							/>
-							<div class="flex-1">
-								<div class="font-medium text-white mb-1">Track for future updates</div>
-								<div class="text-xs text-slate-400">Adds to library without searching now, monitors for updates during scheduled scans</div>
-							</div>
-						</label>
-					</div>
-				</fieldset>
-
-				<!-- Platform -->
-				<div>
-					<label for="platform_filter" class="block text-sm font-medium text-slate-300 mb-2">
-						Platform
-					</label>
-					<div class="relative">
-						<select
-							id="platform_filter"
-							name="platform_filter"
-							bind:value={platformFilter}
-							class="w-full px-4 py-3 pr-10 bg-slate-900/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent transition-all appearance-none cursor-pointer"
-						>
-							<option value="Windows">Windows</option>
-							<option value="Linux">Linux</option>
-							<option value="Windows,Linux">Windows + Linux</option>
-						</select>
-						<!-- Dropdown Arrow Icon -->
-						<div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-							<svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+							<svg class="pointer-events-none absolute h-5 w-5 stroke-white opacity-0 peer-checked:opacity-100" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
 							</svg>
 						</div>
-					</div>
+						<div class="flex-1">
+							<div class="text-sm font-medium text-white">Search immediately</div>
+							<div class="text-[10px] text-slate-500">Show currently available releases on dashboard. If unchecked, game will only appear when a NEWER version is found later.</div>
+						</div>
+					</label>
 				</div>
 
 				<!-- Actions -->
@@ -926,17 +1070,37 @@
 							<label for="edit_title" class="block text-sm font-medium text-slate-300 mb-1"
 								>Title</label
 							>
-							<input
-								type="text"
-								id="edit_title"
-								name="title"
-								value={editGame.title}
-								oninput={handleEditTitleInput}
-								onfocus={() => { if (editSuggestions.length > 0) showEditSuggestions = true; }}
-								required
-								class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm"
-								autocomplete="off"
-							/>
+							<div class="relative">
+								<input
+									type="text"
+									id="edit_title"
+									name="title"
+									value={editGame.title}
+									oninput={handleEditTitleInput}
+									onfocus={() => { if (editSuggestions.length > 0) showEditSuggestions = true; }}
+									required
+									class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm pr-10"
+									autocomplete="off"
+								/>
+								
+								<!-- Status Icon -->
+								<div class="absolute right-3 top-1/2 -translate-y-1/2">
+									{#if isEditingSearching}
+										<svg class="animate-spin h-4 w-4 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+											<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+											<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+										</svg>
+									{:else if editSuggestions.length > 0}
+										<svg class="h-4 w-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+										</svg>
+									{:else}
+										<svg class="h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+										</svg>
+									{/if}
+								</div>
+							</div>
 							{#if showEditSuggestions && editSuggestions.length > 0}
 								<div class="absolute z-10 w-full mt-1 bg-slate-700 border border-slate-600 rounded-lg shadow-xl max-h-60 overflow-y-auto">
 									{#each editSuggestions as suggestion}

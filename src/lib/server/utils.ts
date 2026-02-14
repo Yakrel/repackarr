@@ -2,11 +2,11 @@ const URL_PATTERN = /https?:\/\/[^\s<>"'`]+/gi;
 
 const VERSION_PATTERNS: RegExp[] = [
 	/\b(\d+(?:\.\d+){1,6}(?:-[A-Za-z0-9]+){1,4})\b/i,
-	/\bv(?:ersion)?\.?\s*(\d+(?:\.\d+){1,4}[a-z]?)/i,
+	/\bv(?:ersion)?\.?\s*(\d+(?:\.\d+){1,4}[a-z]?\d*)/i,
 	/\b(\d+(?:\.\d+){1,6})\s*hotfix\b/i,
-	/\[(\d+(?:\.\d+){1,4}[a-z]?)\]/i,
-	/\((\d+(?:\.\d+){1,4}[a-z]?)(?:\s*(?:\+\s*\d+\s*dlc|\/dlc))?\)/i,
-	/\bbuild[\s._-]?(\d{3,8})\b/i,
+	/\[(\d+(?:\.\d+){1,4}[a-z]?\d*)\]/i,
+	/\((\d+(?:\.\d+){1,4}[a-z]?\d*)(?:\s*(?:\+\s*\d+\s*dlc|\/dlc))?\)/i,
+	/\bbuild[\s._-]?(\d{3,8}[a-z]?\d*)\b/i,
 	/(?:^|[.\-_\s])b(\d{4,})(?:$|[.\-_\s])/i,
 	/\bv(\d{3,8})\b/i
 ];
@@ -166,26 +166,45 @@ export function normalizeVersion(version: string): string {
 
 /**
  * Compares two version strings
- * @param localVer - Local version string
- * @param remoteVer - Remote version string
- * @returns 1 if remote is newer, -1 if local is newer, 0 if equal, null if comparison failed
+ * @param v1 - First version string
+ * @param v2 - Second version string
+ * @returns 1 if v1 is newer, -1 if v2 is newer, 0 if equal, null if comparison failed
  */
-export function compareVersions(localVer: string, remoteVer: string): number | null {
-	if (!localVer || !remoteVer) return null;
+export function compareVersions(v1: string, v2: string): number | null {
+	if (!v1 || !v2) return null;
 
-	const local = normalizeVersion(localVer);
-	const remote = normalizeVersion(remoteVer);
+	const v1Clean = normalizeVersion(v1);
+	const v2Clean = normalizeVersion(v2);
+
+	if (v1Clean === v2Clean) return 0;
 
 	try {
-		const localParts = local.split('.').map(Number);
-		const remoteParts = remote.split('.').map(Number);
-		const maxLen = Math.max(localParts.length, remoteParts.length);
+		const v1Parts = v1Clean.split('.');
+		const v2Parts = v2Clean.split('.');
+		const maxLen = Math.max(v1Parts.length, v2Parts.length);
 
 		for (let i = 0; i < maxLen; i++) {
-			const l = localParts[i] || 0;
-			const r = remoteParts[i] || 0;
-			if (r > l) return 1;
-			if (r < l) return -1;
+			const p1 = v1Parts[i] || '0';
+			const p2 = v2Parts[i] || '0';
+
+			if (p1 === p2) continue;
+
+			// Try numeric comparison first
+			const n1 = parseInt(p1, 10);
+			const n2 = parseInt(p2, 10);
+
+			if (!isNaN(n1) && !isNaN(n2)) {
+				if (n1 > n2) return 1;
+				if (n1 < n2) return -1;
+				
+				// If numeric parts are same but strings differ (e.g., '1a' vs '1b')
+				if (p1.length !== String(n1).length || p2.length !== String(n2).length) {
+					return p1.localeCompare(p2, undefined, { numeric: true }) > 0 ? 1 : -1;
+				}
+			} else {
+				// String comparison for non-numeric parts
+				return p1.localeCompare(p2, undefined, { numeric: true }) > 0 ? 1 : -1;
+			}
 		}
 		return 0;
 	} catch {

@@ -159,6 +159,8 @@ export interface IGDBTokenResponse {
  * Game metadata from IGDB
  */
 export interface GameMetadata {
+	name: string | undefined;
+	igdbId: number | undefined;
 	coverUrl: string | undefined;
 	steamAppId: number | undefined;
 }

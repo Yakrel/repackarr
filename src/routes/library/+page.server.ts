@@ -3,7 +3,7 @@ import { games, releases } from '$lib/server/schema.js';
 import { eq, sql } from 'drizzle-orm';
 import type { PageServerLoad, Actions } from './$types.js';
 import { fail } from '@sveltejs/kit';
-import { normalizeTitle, cleanGameTitle, toTitleCaseWords } from '$lib/server/utils.js';
+import { normalizeTitle, cleanGameTitle, toTitleCaseWords, compareVersions } from '$lib/server/utils.js';
 import { isIgdbEnabled } from '$lib/server/config.js';
 import { getGameMetadata } from '$lib/server/igdb.js';
 import { searchForGame } from '$lib/server/prowlarr.js';
@@ -69,7 +69,7 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const titleRaw = (form.get('title') as string)?.trim();
 		const searchQueryRaw = (form.get('search_query') as string)?.trim();
-		const mode = form.get('mode') as string;
+		const searchNow = form.get('search_now') === 'on';
 		const platformFilter = (form.get('platform_filter') as string) || 'Windows';
 		const excludeKeywords = (form.get('exclude_keywords') as string)?.trim() || null;
 
@@ -122,14 +122,54 @@ export const actions: Actions = {
 			.returning()
 			.get();
 
-		// If download_now mode, search immediately
-		if (mode === 'download_now' && result) {
+		if (result) {
+			// Trigger immediate search
 			const searchResult = await searchForGame(result.id);
+
+			// If searchNow is FALSE, we want to "silently" track the game.
+			// We do this by setting the currentVersionDate to the latest found release date,
+			// and then deleting the found releases so they don't show up on dashboard.
+			if (!searchNow && searchResult.totalFound > 0) {
+				const allFound = db.select().from(releases).where(eq(releases.gameId, result.id)).all();
+				if (allFound.length > 0) {
+					const latestRelease = allFound.sort((a, b) => {
+						// Sort by version (highest first)
+						if (a.parsedVersion && b.parsedVersion) {
+							const cmp = compareVersions(a.parsedVersion, b.parsedVersion);
+							if (cmp !== 0) return cmp === -1 ? 1 : -1;
+						} else if (a.parsedVersion && !b.parsedVersion) {
+							return -1;
+						} else if (!a.parsedVersion && b.parsedVersion) {
+							return 1;
+						}
+						// If versions are same or both missing, sort by date (newest first)
+						return Date.parse(b.uploadDate) - Date.parse(a.uploadDate);
+					})[0];
+
+					db.update(games)
+						.set({ 
+							currentVersionDate: latestRelease.uploadDate,
+							currentVersion: latestRelease.parsedVersion || null
+						})
+						.where(eq(games.id, result.id))
+						.run();
+
+					// Delete the releases so dashboard stays clean
+					db.delete(releases).where(eq(releases.gameId, result.id)).run();
+					
+					return { 
+						success: true, 
+						message: 'Game added to library. Monitoring for future updates starting from today.',
+						gameId: result.id 
+					};
+				}
+			}
+
 			return { 
 				success: true, 
 				gameId: result.id,
-				foundReleases: searchResult.added,
-				redirectToDashboard: mode === 'download_now'
+				foundReleases: searchNow ? searchResult.added : 0,
+				redirectToDashboard: searchNow
 			};
 		}
 
