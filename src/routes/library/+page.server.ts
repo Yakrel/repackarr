@@ -1,0 +1,274 @@
+import { db } from '$lib/server/database.js';
+import { games, releases } from '$lib/server/schema.js';
+import { and, eq, sql } from 'drizzle-orm';
+import type { PageServerLoad, Actions } from './$types.js';
+import { fail } from '@sveltejs/kit';
+import { normalizeTitle, cleanGameTitle, toTitleCaseWords, compareVersions } from '$lib/server/utils.js';
+import { isIgdbEnabled } from '$lib/server/config.js';
+import { getGameMetadata } from '$lib/server/igdb.js';
+import { searchForGame } from '$lib/server/prowlarr.js';
+import { logger } from '$lib/server/logger.js';
+
+const METADATA_BACKFILL_INTERVAL_MS = 30 * 60 * 1000;
+let metadataBackfillRunning = false;
+let lastMetadataBackfillAt = 0;
+
+function scheduleMetadataBackfill(allGames: Array<typeof games.$inferSelect>): void {
+	if (!isIgdbEnabled()) return;
+	if (metadataBackfillRunning) return;
+	if (Date.now() - lastMetadataBackfillAt < METADATA_BACKFILL_INTERVAL_MS) return;
+
+	const gamesMissingSteamId = allGames.filter((game) => !game.steamAppId);
+	if (gamesMissingSteamId.length === 0) return;
+
+	metadataBackfillRunning = true;
+	lastMetadataBackfillAt = Date.now();
+
+	void (async () => {
+		let updatedCount = 0;
+		for (const game of gamesMissingSteamId) {
+			try {
+				const cleanedTitle = cleanGameTitle(game.title);
+				const metadata = await getGameMetadata(cleanedTitle);
+				if (!metadata) continue;
+
+				const updates: Record<string, unknown> = {};
+				if (metadata.steamAppId) updates.steamAppId = metadata.steamAppId;
+				if (!game.coverUrl && metadata.coverUrl) updates.coverUrl = metadata.coverUrl;
+				if (Object.keys(updates).length === 0) continue;
+
+				db.update(games).set(updates).where(eq(games.id, game.id)).run();
+				updatedCount++;
+			} catch (error) {
+				logger.warn(`Failed to backfill metadata for ${game.title}: ${error}`);
+			}
+		}
+
+		if (updatedCount > 0) {
+			logger.info(`Background IGDB metadata backfill updated ${updatedCount} game(s)`);
+		}
+	})().finally(() => {
+		metadataBackfillRunning = false;
+	});
+}
+
+export const load: PageServerLoad = async () => {
+	const allGames = db.select().from(games).orderBy(games.title).all();
+	scheduleMetadataBackfill(allGames);
+
+	// Get release counts per game
+	const releaseCounts = db
+		.select({
+			gameId: releases.gameId,
+			count: sql<number>`count(*)`
+		})
+		.from(releases)
+		.innerJoin(games, eq(releases.gameId, games.id))
+		.where(and(eq(releases.isIgnored, false), eq(games.status, 'monitored')))
+		.groupBy(releases.gameId)
+		.all();
+
+	const countMap = new Map(releaseCounts.map((r) => [r.gameId, r.count]));
+
+	const gamesWithCounts = allGames.map((g) => ({
+		...g,
+		updateCount: countMap.get(g.id) || 0,
+		cleanTitle: toTitleCaseWords(cleanGameTitle(g.title)),
+		cleanSearchQuery: toTitleCaseWords(g.searchQuery)
+	}));
+
+	const stats = {
+		totalGames: allGames.length,
+		monitoredGames: allGames.filter((g) => g.status === 'monitored').length,
+		pendingUpdates: releaseCounts.length
+	};
+
+	return { games: gamesWithCounts, stats };
+};
+
+export const actions: Actions = {
+	addGame: async ({ request }) => {
+		const form = await request.formData();
+		const titleRaw = (form.get('title') as string)?.trim();
+		const searchQueryRaw = (form.get('search_query') as string)?.trim();
+		const searchNow = form.get('search_now') === 'on';
+		const platformFilter = (form.get('platform_filter') as string) || 'Windows';
+		const excludeKeywords = (form.get('exclude_keywords') as string)?.trim() || null;
+
+		if (!titleRaw) return fail(400, { error: 'Title is required' });
+		if (!searchQueryRaw) return fail(400, { error: 'Search query is required' });
+
+		const title = toTitleCaseWords(titleRaw);
+		const searchQuery = toTitleCaseWords(searchQueryRaw);
+
+		// Check duplicates
+		const normalizedTitle = normalizeTitle(title);
+		const allGames = db.select().from(games).all();
+		const duplicate = allGames.find((g) => normalizeTitle(g.title) === normalizedTitle);
+		if (duplicate) {
+			return fail(400, { error: `A similar game already exists: '${duplicate.title}'` });
+		}
+
+		const versionDate = new Date(0).toISOString();
+
+		// Try IGDB metadata
+		let coverUrl: string | null = null;
+		let steamAppId: number | null = null;
+		if (isIgdbEnabled()) {
+			try {
+				const cleanedTitle = cleanGameTitle(title);
+				const metadata = await getGameMetadata(cleanedTitle);
+				if (metadata) {
+					coverUrl = metadata.coverUrl ?? null;
+					steamAppId = metadata.steamAppId ?? null;
+				}
+			} catch (error) {
+				logger.warn(`Failed to fetch IGDB metadata for ${title}: ${error}`);
+			}
+		}
+
+		const result = db
+			.insert(games)
+			.values({
+				title,
+				searchQuery,
+				currentVersionDate: versionDate,
+				currentVersion: null,
+				status: 'monitored',
+				coverUrl,
+				steamAppId,
+				isManual: true,
+				platformFilter,
+				excludeKeywords
+			})
+			.returning()
+			.get();
+
+		if (result) {
+			// Trigger immediate search
+			const searchResult = await searchForGame(result.id);
+
+			// If searchNow is FALSE, we want to "silently" track the game.
+			// We do this by setting the currentVersionDate to the latest found release date,
+			// and then deleting the found releases so they don't show up on dashboard.
+			if (!searchNow && searchResult.totalFound > 0) {
+				const allFound = db.select().from(releases).where(eq(releases.gameId, result.id)).all();
+				if (allFound.length > 0) {
+					const latestRelease = allFound.sort((a, b) => {
+						// Sort by version (highest first)
+						if (a.parsedVersion && b.parsedVersion) {
+							const cmp = compareVersions(a.parsedVersion, b.parsedVersion);
+							if (cmp !== 0) return cmp === -1 ? 1 : -1;
+						} else if (a.parsedVersion && !b.parsedVersion) {
+							return -1;
+						} else if (!a.parsedVersion && b.parsedVersion) {
+							return 1;
+						}
+						// If versions are same or both missing, sort by date (newest first)
+						return Date.parse(b.uploadDate) - Date.parse(a.uploadDate);
+					})[0];
+
+					db.update(games)
+						.set({ 
+							currentVersionDate: latestRelease.uploadDate,
+							currentVersion: latestRelease.parsedVersion || null
+						})
+						.where(eq(games.id, result.id))
+						.run();
+
+					// Delete the releases so dashboard stays clean
+					db.delete(releases).where(eq(releases.gameId, result.id)).run();
+					
+					return { 
+						success: true, 
+						message: 'Game added to library. Monitoring for future updates starting from today.',
+						gameId: result.id 
+					};
+				}
+			}
+
+			return { 
+				success: true, 
+				gameId: result.id,
+				foundReleases: searchNow ? searchResult.added : 0,
+				redirectToDashboard: searchNow
+			};
+		}
+
+		return fail(500, { error: 'Failed to insert game into database' });
+	},
+
+	updateGame: async ({ request }) => {
+		const form = await request.formData();
+		const id = parseInt(form.get('id') as string, 10);
+		const titleRaw = (form.get('title') as string)?.trim();
+		const searchQueryRaw = (form.get('search_query') as string)?.trim();
+		const versionDate = form.get('version_date') as string;
+		const version = (form.get('version') as string)?.trim() || null;
+		const platformFilter = (form.get('platform_filter') as string) || 'Windows';
+		const excludeKeywords = (form.get('exclude_keywords') as string)?.trim() || null;
+		const igdbIdStr = form.get('igdb_id')?.toString();
+		const igdbId = igdbIdStr ? parseInt(igdbIdStr) : null;
+
+		if (!id) return fail(400, { error: 'Invalid game ID' });
+
+		const title = titleRaw ? toTitleCaseWords(titleRaw) : undefined;
+		const searchQuery = searchQueryRaw ? toTitleCaseWords(searchQueryRaw) : undefined;
+
+		let parsedDate: string;
+		try {
+			parsedDate = new Date(versionDate).toISOString();
+		} catch {
+			return fail(400, { error: 'Invalid date format' });
+		}
+
+		db.update(games)
+			.set({
+				title,
+				searchQuery,
+				currentVersionDate: parsedDate,
+				currentVersion: version,
+				platformFilter,
+				excludeKeywords,
+				igdbId: isNaN(igdbId!) ? null : igdbId
+			})
+			.where(eq(games.id, id))
+			.run();
+
+		return { success: true };
+	},
+
+	deleteGame: async ({ request }) => {
+		const form = await request.formData();
+		const id = parseInt(form.get('id') as string, 10);
+		if (!id) return fail(400, { error: 'Invalid game ID' });
+
+		db.delete(games).where(eq(games.id, id)).run();
+		return { success: true };
+	},
+
+	toggleMonitor: async ({ request }) => {
+		const form = await request.formData();
+		const id = parseInt(form.get('id') as string, 10);
+		if (!id) return fail(400, { error: 'Invalid game ID' });
+
+		const game = db.select().from(games).where(eq(games.id, id)).get();
+		if (!game) return fail(404, { error: 'Game not found' });
+
+		const newStatus = game.status === 'monitored' ? 'ignored' : 'monitored';
+		db.update(games).set({ status: newStatus }).where(eq(games.id, id)).run();
+
+		return { success: true };
+	},
+
+	updateQuery: async ({ request }) => {
+		const form = await request.formData();
+		const id = parseInt(form.get('id') as string, 10);
+		const searchQuery = (form.get('search_query') as string)?.trim();
+
+		if (!id || !searchQuery) return fail(400, { error: 'Invalid input' });
+
+		db.update(games).set({ searchQuery }).where(eq(games.id, id)).run();
+		return { success: true };
+	}
+};
