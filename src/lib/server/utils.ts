@@ -69,7 +69,7 @@ function normalizeExtractedVersion(version: string): string | null {
 export function extractVersion(title: string): string | null {
 	if (!title?.trim()) return null;
 	const cleanTitle = title.trim().replace(URL_PATTERN, ' ');
-	const parenthesizedBuild = cleanTitle.match(/\((\d{5,10})\)/);
+	const parenthesizedBuild = cleanTitle.match(/\((\d{5,10})(?:\s*[+/][^)]{0,20})?\)/i);
 	if (parenthesizedBuild) return parenthesizedBuild[1];
 	const bracketedBuild = cleanTitle.match(/\[(\d{5,10})\]/);
 	if (bracketedBuild) return bracketedBuild[1];

@@ -101,6 +101,13 @@ export async function runSearchUpdates(currentProgress?: { start: number, total:
             logger.info(`Cleaned up ${staleIds.length} stale release(s).`);
         }
 
+        // --- ZERO-SEEDER CLEANUP ---
+        const zeroSeederReleases = db.select().from(releases).all().filter(r => r.seeders === 0);
+        if (zeroSeederReleases.length > 0) {
+            db.delete(releases).where(inArray(releases.id, zeroSeederReleases.map(r => r.id))).run();
+            logger.info(`Cleaned up ${zeroSeederReleases.length} zero-seeder release(s).`);
+        }
+
     } catch (error) {
         logError('Update search failed', error);
     }

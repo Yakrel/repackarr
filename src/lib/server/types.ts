@@ -12,11 +12,16 @@ export interface QBitTorrentInfo {
 	state: string;
 	progress: number;
 	dlspeed: number;
+	upspeed: number;
+	dl_limit: number;
+	up_limit: number;
 	eta: number;
 	category: string;
 	added_on: number;
 	completion_on: number;
 	total_size: number;
+	num_seeds: number;
+	num_leechs: number;
 }
 
 /**

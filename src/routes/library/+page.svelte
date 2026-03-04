@@ -14,6 +14,7 @@
 		message: string;
 		type: 'danger' | 'warning' | 'primary';
 		confirmText?: string;
+		hasQbitTorrent?: boolean;
 		onConfirm: () => void;
 	} | null>(null);
 
@@ -26,6 +27,10 @@
 	let showSkippedFor = $state<number | null>(null);
 	let skippedReleases = $state<SkipInfo[]>([]);
 	let loadingSkipped = $state(false);
+
+	// Delete modal torrent options
+	let deleteModalDeleteFromQbit = $state(false);
+	let deleteModalDeleteFiles = $state(false);
 	
 	// Add game form state
 	let gameTitle = $state('');
@@ -49,18 +54,108 @@
 
 	// qBittorrent status polling
 	let qbitStatus = $state<Record<number, {
+		hash: string;
 		progress: number;
 		state: string;
 		dlspeed: string;
+		upspeed: string;
+		dlLimit: number;
+		ulLimit: number;
 		eta: string;
 		rawEta: number;
+		numSeeds: number;
+		numLeechs: number;
 	}>>({});
+
+	// qBit torrent control state
+	let qbitActionLoading = $state<Record<number, string | null>>({});
+
+	// Per-torrent speed limit inline edit state
+	let speedLimitEditing = $state<Record<number, boolean>>({});
+	let speedLimitInput = $state<Record<number, string>>({});
+	// Track currently set limit per game (KB/s, 0 = unlimited)
+	let torrentSpeedLimits = $state<Record<number, number>>({});
+
+	let uploadLimitEditing = $state<Record<number, boolean>>({});
+	let uploadLimitInput = $state<Record<number, string>>({});
+	let torrentUploadLimits = $state<Record<number, number>>({});
+
+	// Global alt speed mode: 0 = normal, 1 = throttled (turtle)
+	let altSpeedMode = $state<0 | 1 | null>(null);
+	let altSpeedToggling = $state(false);
+
+	async function fetchSpeedMode() {
+		try {
+			const resp = await fetch('/api/qbit/speed-mode');
+			if (resp.ok) {
+				const data = await resp.json();
+				altSpeedMode = data.mode ?? null;
+			}
+		} catch { /* ignore */ }
+	}
+
+	async function toggleSpeedMode() {
+		altSpeedToggling = true;
+		try {
+			const resp = await fetch('/api/qbit/speed-mode', { method: 'POST' });
+			if (resp.ok) {
+				const data = await resp.json();
+				altSpeedMode = data.mode ?? altSpeedMode;
+			}
+		} catch { /* ignore */ }
+		altSpeedToggling = false;
+	}
+
+	async function qbitControl(gameId: number, hash: string, action: string, extra?: Record<string, unknown>) {
+		qbitActionLoading = { ...qbitActionLoading, [gameId]: action };
+		try {
+			await fetch('/api/qbit/control', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action, hash, ...extra })
+			});
+			await new Promise((r) => setTimeout(r, 800));
+			await fetchQbitStatus();
+		} catch {
+			// ignore
+		} finally {
+			qbitActionLoading = { ...qbitActionLoading, [gameId]: null };
+		}
+	}
+
+	async function saveSpeedLimit(gameId: number, hash: string) {
+		const raw = speedLimitInput[gameId] ?? '';
+		const kbps = parseFloat(raw);
+		const limitKbps = isNaN(kbps) || kbps < 0 ? 0 : kbps;
+		await qbitControl(gameId, hash, 'setDlLimit', { limitKbps });
+		torrentSpeedLimits = { ...torrentSpeedLimits, [gameId]: limitKbps };
+		speedLimitEditing = { ...speedLimitEditing, [gameId]: false };
+	}
+
+	async function saveUploadLimit(gameId: number, hash: string) {
+		const raw = uploadLimitInput[gameId] ?? '';
+		const kbps = parseFloat(raw);
+		const limitKbps = isNaN(kbps) || kbps < 0 ? 0 : kbps;
+		await qbitControl(gameId, hash, 'setUpLimit', { limitKbps });
+		torrentUploadLimits = { ...torrentUploadLimits, [gameId]: limitKbps };
+		uploadLimitEditing = { ...uploadLimitEditing, [gameId]: false };
+	}
 
 	async function fetchQbitStatus() {
 		try {
 			const resp = await fetch('/api/qbit/status');
 			if (resp.ok) {
-				qbitStatus = await resp.json();
+				const data = await resp.json();
+				qbitStatus = data;
+				// Sync live limits from qBittorrent
+				const newDlLimits: Record<number, number> = {};
+				const newUlLimits: Record<number, number> = {};
+				for (const [id, status] of Object.entries(data) as [string, typeof data[0]][]) {
+					newDlLimits[Number(id)] = status.dlLimit ?? 0;
+					newUlLimits[Number(id)] = status.ulLimit ?? 0;
+				}
+				torrentSpeedLimits = newDlLimits;
+				torrentUploadLimits = newUlLimits;
 			}
 		} catch (error) {
 			console.error('Failed to fetch qbit status:', error);
@@ -69,8 +164,13 @@
 
 	$effect(() => {
 		fetchQbitStatus();
-		const interval = setInterval(fetchQbitStatus, 5000);
-		return () => clearInterval(interval);
+		fetchSpeedMode();
+		const statusInterval = setInterval(fetchQbitStatus, 5000);
+		const speedInterval = setInterval(fetchSpeedMode, 10000);
+		return () => {
+			clearInterval(statusInterval);
+			clearInterval(speedInterval);
+		};
 	});
 	
 	// Helper functions for modal close
@@ -195,33 +295,40 @@
 		}
 	}
 
-	async function handleDeleteGame(gameId: number, gameName: string) {
+	async function handleDeleteGame(gameId: number, gameName: string, gameInfoHash: string | null) {
+		deleteModalDeleteFromQbit = false;
+		deleteModalDeleteFiles = false;
+		const hasQbitTorrent = !!gameInfoHash;
 		confirmModal = {
 			show: true,
 			title: 'Delete Game',
 			message: `Are you sure you want to delete "${gameName}" and all its releases? This action cannot be undone.`,
 			type: 'danger',
 			confirmText: 'Delete',
+			hasQbitTorrent,
 			onConfirm: async () => {
 				confirmModal = null;
 				try {
-					const formData = new FormData();
-					formData.append('id', gameId.toString());
-					
-					const resp = await fetch('?/deleteGame', {
-						method: 'POST',
-						body: formData
+					const resp = await fetch(`/api/games/${gameId}`, {
+						method: 'DELETE',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							deleteFromQbit: hasQbitTorrent && deleteModalDeleteFromQbit,
+							deleteFiles: hasQbitTorrent && deleteModalDeleteFromQbit && deleteModalDeleteFiles
+						})
 					});
-					
-								const result = await resp.json();
-								if (result.type === 'success') {
-									await invalidateAll();
-								}
-							} catch (error) {
-								console.error('Delete error:', error);
-								toastStore.error('Failed to delete game');
-							}
-						}		};
+
+					const result = await resp.json();
+					if (result.success) {
+						await invalidateAll();
+					} else {
+						toastStore.error(result.error || 'Failed to delete game');
+					}
+				} catch (error) {
+					console.error('Delete error:', error);
+					toastStore.error('Failed to delete game');
+				}
+			}		};
 	}
 
 	async function handleToggleMonitor(gameId: number) {
@@ -521,6 +628,26 @@
 			</svg>
 			Add Game
 		</button>
+
+		<!-- Alt Speed Mode (Turtle) Toggle -->
+		{#if altSpeedMode !== null}
+			<button
+				onclick={toggleSpeedMode}
+				disabled={altSpeedToggling}
+				title={altSpeedMode === 1 ? 'Throttled (click to resume normal speed)' : 'Normal speed (click to throttle)'}
+				class="px-3 py-2 text-sm font-medium rounded-lg border transition-all flex items-center gap-2 whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed
+					{altSpeedMode === 1
+						? 'bg-amber-500/20 border-amber-500/40 text-amber-400 hover:bg-amber-500/30'
+						: 'bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-slate-200'}"
+			>
+				{#if altSpeedToggling}
+					<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+				{:else}
+					<span class="text-base leading-none">{altSpeedMode === 1 ? '🐢' : '⚡'}</span>
+				{/if}
+				{altSpeedMode === 1 ? 'Throttled' : 'Normal'}
+			</button>
+		{/if}
 	</div>
 
 	<!-- Stats -->
@@ -620,7 +747,10 @@
 										{#if qbitStatus[game.id]}
 											{@const status = qbitStatus[game.id]}
 											{@const isDownloading = status.state === 'downloading' || status.state === 'stalledDL'}
-											{@const isFinished = status.progress === 100 || status.state.includes('UP') || status.state === 'uploading'}
+											{@const isFinished = status.progress === 100 || status.state.includes('UP') || status.state === 'uploading' || status.state === 'stoppedUP'}
+											{@const isPaused = status.state === 'stoppedDL' || status.state === 'pausedDL'}
+											{@const isStalled = status.state === 'stalledDL'}
+											{@const actionLoading = qbitActionLoading[game.id]}
 											{@const friendlyState = status.state
 												.replace('stoppedDL', 'Paused')
 												.replace('stoppedUP', 'Finished')
@@ -629,6 +759,7 @@
 												.replace('uploading', 'Seeding')
 												.replace('metaDL', 'Fetching Metadata')
 												.replace(/_/g, ' ')}
+											{#if !isFinished}
 											<div class="mt-2 w-48 group/progress">
 												<div class="flex items-center justify-between text-[10px] mb-1">
 													<span class="font-bold uppercase tracking-wider {isDownloading ? 'text-blue-400' : isFinished ? 'text-emerald-400' : 'text-slate-400'}">
@@ -650,6 +781,12 @@
 															</svg>
 															{status.dlspeed}
 														</div>
+														<div class="flex items-center gap-0.5 text-emerald-400/70">
+															<svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+															</svg>
+															{status.upspeed}
+														</div>
 														<span class="text-slate-400">ETA: {status.eta}</span>
 													{:else if isFinished}
 														<span class="text-emerald-500/70">Ready to play</span>
@@ -657,7 +794,76 @@
 														<span>{status.dlspeed}</span>
 													{/if}
 												</div>
+												{#if status.numSeeds !== undefined && (isDownloading || isStalled)}
+													<div class="flex items-center gap-2 mt-1 text-[9px] text-slate-500">
+														<span title="Seeds">🌱 {status.numSeeds}</span>
+														<span title="Peers">👥 {status.numLeechs}</span>
+													</div>
+												{/if}
+												<!-- Torrent controls: all on one row -->
+												<div class="flex items-center gap-1 mt-2">
+													{#if isPaused}
+														<button
+															onclick={() => qbitControl(game.id, status.hash, 'resume')}
+															disabled={!!actionLoading}
+															class="px-1 py-px text-[8px] font-semibold bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 rounded border border-emerald-600/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+															title="Resume torrent"
+														>▶ Resume		</button>
+													{:else if !isFinished}
+														<button
+															onclick={() => qbitControl(game.id, status.hash, 'pause')}
+															disabled={!!actionLoading}
+															class="px-1 py-px text-[8px] font-semibold bg-amber-600/20 hover:bg-amber-600/40 text-amber-400 rounded border border-amber-600/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+															title="Pause torrent"
+														>⏸ Pause		</button>
+													{/if}
+													{#if isStalled}
+														<button
+															onclick={() => qbitControl(game.id, status.hash, 'reannounce')}
+															disabled={!!actionLoading}
+															class="px-1 py-px text-[8px] font-semibold bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded border border-blue-600/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+															title="Re-announce to trackers"
+														>📡 Reannounce		</button>
+													{/if}
+													<!-- DL limit -->
+													{#if speedLimitEditing[game.id]}
+														<input type="number" min="0" step="1" placeholder="KB/s"
+															bind:value={speedLimitInput[game.id]}
+															onkeydown={(e) => { if (e.key === 'Enter') saveSpeedLimit(game.id, status.hash); if (e.key === 'Escape') speedLimitEditing = { ...speedLimitEditing, [game.id]: false }; }}
+															class="w-14 px-1 py-px text-[8px] bg-slate-700 border border-slate-500 rounded text-white focus:outline-none focus:border-blue-500"
+														/>
+														<button onclick={() => saveSpeedLimit(game.id, status.hash)} class="px-1 py-px text-[8px] bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 rounded border border-blue-600/40">✓</button>
+														<button onclick={() => speedLimitEditing = { ...speedLimitEditing, [game.id]: false }} class="px-1 py-px text-[8px] bg-slate-600/30 hover:bg-slate-600/50 text-slate-400 rounded border border-slate-600/40">✕</button>
+													{:else}
+														<button
+															onclick={() => { const cur = torrentSpeedLimits[game.id] ?? 0; speedLimitInput = { ...speedLimitInput, [game.id]: cur > 0 ? cur.toString() : '' }; speedLimitEditing = { ...speedLimitEditing, [game.id]: true }; }}
+															class="px-1 py-px text-[8px] font-semibold bg-slate-600/20 hover:bg-slate-600/40 text-slate-400 hover:text-slate-200 rounded border border-slate-600/30 transition-colors"
+															title="Set download speed limit"
+														>⬇ {(torrentSpeedLimits[game.id] ?? 0) > 0 ? `${torrentSpeedLimits[game.id]} KB/s` : 'Unlimited'}</button>
+													{/if}
+													<!-- UL limit -->
+													{#if uploadLimitEditing[game.id]}
+														<input type="number" min="0" step="1" placeholder="KB/s"
+															bind:value={uploadLimitInput[game.id]}
+															onkeydown={(e) => { if (e.key === 'Enter') saveUploadLimit(game.id, status.hash); if (e.key === 'Escape') uploadLimitEditing = { ...uploadLimitEditing, [game.id]: false }; }}
+															class="w-14 px-1 py-px text-[8px] bg-slate-700 border border-slate-500 rounded text-white focus:outline-none focus:border-blue-500"
+														/>
+														<button onclick={() => saveUploadLimit(game.id, status.hash)} class="px-1 py-px text-[8px] bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 rounded border border-blue-600/40">✓</button>
+														<button onclick={() => uploadLimitEditing = { ...uploadLimitEditing, [game.id]: false }} class="px-1 py-px text-[8px] bg-slate-600/30 hover:bg-slate-600/50 text-slate-400 rounded border border-slate-600/40">✕</button>
+													{:else}
+														<button
+															onclick={() => { const cur = torrentUploadLimits[game.id] ?? 0; uploadLimitInput = { ...uploadLimitInput, [game.id]: cur > 0 ? cur.toString() : '' }; uploadLimitEditing = { ...uploadLimitEditing, [game.id]: true }; }}
+															class="px-1 py-px text-[8px] font-semibold bg-slate-600/20 hover:bg-slate-600/40 text-slate-400 hover:text-slate-200 rounded border border-slate-600/30 transition-colors"
+															title="Set upload speed limit"
+														>⬆ {(torrentUploadLimits[game.id] ?? 0) > 0 ? `${torrentUploadLimits[game.id]} KB/s` : 'Unlimited'}</button>
+													{/if}
+												</div>
 											</div>
+											{:else}
+											<div class="mt-2">
+												<span class="px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 rounded border border-emerald-500/20">{friendlyState}</span>
+											</div>
+											{/if}
 										{/if}
 									</div>
 								</div>
@@ -826,7 +1032,7 @@
 										Skipped
 									</button>
 									<button
-										onclick={() => handleDeleteGame(game.id, game.title)}
+										onclick={() => handleDeleteGame(game.id, game.title, game.infoHash ?? null)}
 										class="group px-2.5 py-1.5 bg-gradient-to-r from-red-600/80 to-red-700/80 hover:from-red-600 hover:to-red-700 text-white text-xs font-medium rounded-lg transition-all shadow-md hover:shadow-red-500/50 flex items-center gap-1.5"
 										title="Permanently delete this game"
 									>
@@ -1236,7 +1442,36 @@
 		confirmText={confirmModal.confirmText}
 		onConfirm={confirmModal.onConfirm}
 		onCancel={() => (confirmModal = null)}
-	/>
+	>
+		{#snippet children()}
+			{#if confirmModal?.hasQbitTorrent}
+				<div class="space-y-3 border-t border-slate-700/50 pt-3">
+					<label class="flex items-center gap-3 cursor-pointer group">
+						<input
+							type="checkbox"
+							bind:checked={deleteModalDeleteFromQbit}
+							class="w-4 h-4 rounded border-slate-600 bg-slate-700 text-red-500 focus:ring-red-500/30 cursor-pointer"
+						/>
+						<span class="text-sm text-slate-300 group-hover:text-white transition-colors">
+							Also remove torrent from qBittorrent
+						</span>
+					</label>
+					{#if deleteModalDeleteFromQbit}
+						<label class="flex items-center gap-3 cursor-pointer group ml-7">
+							<input
+								type="checkbox"
+								bind:checked={deleteModalDeleteFiles}
+								class="w-4 h-4 rounded border-slate-600 bg-slate-700 text-red-500 focus:ring-red-500/30 cursor-pointer"
+							/>
+							<span class="text-sm text-red-400 group-hover:text-red-300 transition-colors">
+							⚠ Also delete files (cannot be undone!)
+							</span>
+						</label>
+					{/if}
+				</div>
+			{/if}
+		{/snippet}
+	</Modal>
 {/if}
 
 <!-- Skipped Releases Modal -->

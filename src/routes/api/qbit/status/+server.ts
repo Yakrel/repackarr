@@ -8,11 +8,17 @@ import type { RequestHandler } from './$types.js';
 
 type QbitStatus = {
 	name: string;
+	hash: string;
 	progress: number;
 	state: string;
 	dlspeed: string;
+	upspeed: string;
+	dlLimit: number;
+	ulLimit: number;
 	eta: string;
 	rawEta: number;
+	numSeeds: number;
+	numLeechs: number;
 };
 
 const STATUS_CACHE_TTL_MS = 2000;
@@ -37,11 +43,17 @@ async function buildStatusMap(): Promise<Record<number, QbitStatus>> {
 		if (!statusMap[matchedGame.id] || statusMap[matchedGame.id].progress < torrent.progress) {
 			statusMap[matchedGame.id] = {
 				name: torrent.name,
+				hash: torrent.hash,
 				progress: Math.round(torrent.progress * 1000) / 10,
 				state: torrent.state,
 				dlspeed: `${formatSize(torrent.dlspeed)}/s`,
+				upspeed: `${formatSize(torrent.upspeed)}/s`,
+				dlLimit: torrent.dl_limit > 0 ? Math.round(torrent.dl_limit / 1024) : 0,
+				ulLimit: torrent.up_limit > 0 ? Math.round(torrent.up_limit / 1024) : 0,
 				eta: formatSeconds(torrent.eta),
-				rawEta: torrent.eta
+				rawEta: torrent.eta,
+				numSeeds: torrent.num_seeds ?? 0,
+				numLeechs: torrent.num_leechs ?? 0
 			};
 		}
 	}

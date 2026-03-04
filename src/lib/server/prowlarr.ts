@@ -194,6 +194,8 @@ function processSearchResult(
         };
     }
 
+    if (item.seeders === 0) return makeSkip('No seeders', 'no_seeders');
+
     if (!queryPattern.test(normalizeTitle(title))) return makeSkip('Title mismatch', 'title');
     if (ignoredTitlesSet.has(title)) return makeSkip('User ignored', 'ignored');
 

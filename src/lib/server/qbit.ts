@@ -185,19 +185,59 @@ class QBitService {
 		} catch { return false; }
 	}
 
-	async removeTorrent(hash: string): Promise<boolean> {
+	async removeTorrent(hash: string, deleteFiles = false, retried = false): Promise<boolean> {
 		if (!hash || !(await this.login())) return false;
 		try {
 			const resp = await fetch(`${this.baseUrl}/api/v2/torrents/delete`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: this.cookies },
-				body: new URLSearchParams({ hashes: hash, deleteFiles: 'false' })
+				body: new URLSearchParams({ hashes: hash, deleteFiles: deleteFiles ? 'true' : 'false' })
 			});
+			if (resp.status === 403 && !retried) { this.cookies = ''; return this.removeTorrent(hash, deleteFiles, true); }
 			return resp.ok;
 		} catch { return false; }
 	}
 
-	async recheckTorrent(hash: string): Promise<boolean> {
+	async pauseTorrent(hash: string, retried = false): Promise<boolean> {
+		if (!hash || !(await this.login())) return false;
+		try {
+			const resp = await fetch(`${this.baseUrl}/api/v2/torrents/stop`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: this.cookies },
+				body: new URLSearchParams({ hashes: hash })
+			});
+			if (resp.status === 403 && !retried) { this.cookies = ''; return this.pauseTorrent(hash, true); }
+			return resp.ok;
+		} catch { return false; }
+	}
+
+	async resumeTorrent(hash: string, retried = false): Promise<boolean> {
+		if (!hash || !(await this.login())) return false;
+		try {
+			const resp = await fetch(`${this.baseUrl}/api/v2/torrents/start`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: this.cookies },
+				body: new URLSearchParams({ hashes: hash })
+			});
+			if (resp.status === 403 && !retried) { this.cookies = ''; return this.resumeTorrent(hash, true); }
+			return resp.ok;
+		} catch { return false; }
+	}
+
+	async reannounceTorrent(hash: string, retried = false): Promise<boolean> {
+		if (!hash || !(await this.login())) return false;
+		try {
+			const resp = await fetch(`${this.baseUrl}/api/v2/torrents/reannounce`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: this.cookies },
+				body: new URLSearchParams({ hashes: hash })
+			});
+			if (resp.status === 403 && !retried) { this.cookies = ''; return this.reannounceTorrent(hash, true); }
+			return resp.ok;
+		} catch { return false; }
+	}
+
+	async recheckTorrent(hash: string, retried = false): Promise<boolean> {
 		if (!hash || !(await this.login())) return false;
 		try {
 			const resp = await fetch(`${this.baseUrl}/api/v2/torrents/recheck`, {
@@ -205,6 +245,57 @@ class QBitService {
 				headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: this.cookies },
 				body: new URLSearchParams({ hashes: hash })
 			});
+			if (resp.status === 403 && !retried) { this.cookies = ''; return this.recheckTorrent(hash, true); }
+			return resp.ok;
+		} catch { return false; }
+	}
+
+	async getSpeedMode(): Promise<0 | 1 | null> {
+		if (!(await this.login())) return null;
+		try {
+			const resp = await fetch(`${this.baseUrl}/api/v2/transfer/speedLimitsMode`, {
+				headers: { Cookie: this.cookies }
+			});
+			if (!resp.ok) return null;
+			const text = await resp.text();
+			return parseInt(text.trim()) === 1 ? 1 : 0;
+		} catch { return null; }
+	}
+
+	async toggleSpeedMode(retried = false): Promise<boolean> {
+		if (!(await this.login())) return false;
+		try {
+			const resp = await fetch(`${this.baseUrl}/api/v2/transfer/toggleSpeedLimitsMode`, {
+				method: 'POST',
+				headers: { Cookie: this.cookies }
+			});
+			if (resp.status === 403 && !retried) { this.cookies = ''; return this.toggleSpeedMode(true); }
+			return resp.ok;
+		} catch { return false; }
+	}
+
+	async setTorrentDownloadLimit(hash: string, limitBytesPerSec: number, retried = false): Promise<boolean> {
+		if (!hash || !(await this.login())) return false;
+		try {
+			const resp = await fetch(`${this.baseUrl}/api/v2/torrents/setDownloadLimit`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: this.cookies },
+				body: new URLSearchParams({ hashes: hash, limit: limitBytesPerSec.toString() })
+			});
+			if (resp.status === 403 && !retried) { this.cookies = ''; return this.setTorrentDownloadLimit(hash, limitBytesPerSec, true); }
+			return resp.ok;
+		} catch { return false; }
+	}
+
+	async setTorrentUploadLimit(hash: string, limitBytesPerSec: number, retried = false): Promise<boolean> {
+		if (!hash || !(await this.login())) return false;
+		try {
+			const resp = await fetch(`${this.baseUrl}/api/v2/torrents/setUploadLimit`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: this.cookies },
+				body: new URLSearchParams({ hashes: hash, limit: limitBytesPerSec.toString() })
+			});
+			if (resp.status === 403 && !retried) { this.cookies = ''; return this.setTorrentUploadLimit(hash, limitBytesPerSec, true); }
 			return resp.ok;
 		} catch { return false; }
 	}

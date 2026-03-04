@@ -1,4 +1,6 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
+
 	interface Props {
 		title: string;
 		message: string;
@@ -7,6 +9,7 @@
 		confirmType?: 'danger' | 'warning' | 'primary';
 		onConfirm: () => void;
 		onCancel: () => void;
+		children?: Snippet;
 	}
 
 	let { 
@@ -16,7 +19,8 @@
 		cancelText = 'Cancel', 
 		confirmType = 'primary',
 		onConfirm, 
-		onCancel 
+		onCancel,
+		children
 	}: Props = $props();
 
 	function handleKeydown(e: KeyboardEvent) {
@@ -42,6 +46,11 @@
 		<div class="p-6">
 			<h3 class="text-xl font-bold text-white mb-2">{title}</h3>
 			<p class="text-slate-300">{message}</p>
+			{#if children}
+				<div class="mt-4">
+					{@render children()}
+				</div>
+			{/if}
 		</div>
 		
 		<div class="bg-slate-800/50 px-6 py-4 rounded-b-xl flex justify-end gap-3 border-t border-slate-700/50">

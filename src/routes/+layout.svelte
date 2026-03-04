@@ -12,8 +12,23 @@
 		{ href: '/library', label: 'Library', icon: 'library' },
 		{ href: '/settings', label: 'Settings', icon: 'settings' }
 	];
-	const appVersion = '0.1.0';
-	const changelog = [{ version: appVersion, notes: [] as string[] }];
+	const appVersion = '0.1.1';
+	const changelog = [
+		{
+			version: '0.1.1',
+			notes: [
+				'Download and upload speed limits can now be set per torrent',
+				'Speed limits are now loaded from qBittorrent on page open',
+				'Upload speed is now shown in torrent status',
+				'Turtle mode toggle added to quickly throttle all speeds',
+				'Torrent control buttons redesigned for a cleaner look'
+			]
+		},
+		{
+			version: '0.1.0',
+			notes: ['Initial release']
+		}
+	];
 
 	let scanning = $state(false);
 	let showChangelog = $state(false);
