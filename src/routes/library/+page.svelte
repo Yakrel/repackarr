@@ -769,13 +769,14 @@
 						<th class="px-4 py-3 text-xs font-medium text-slate-400 uppercase">Status</th>
 						<th class="px-4 py-3 text-xs font-medium text-slate-400 uppercase">Updates</th>
 						<th class="px-4 py-3 text-xs font-medium text-slate-400 uppercase">Links</th>
+						<th class="px-4 py-3 text-xs font-medium text-slate-400 uppercase">AutoDL</th>
 						<th class="px-4 py-3 text-xs font-medium text-slate-400 uppercase">Actions</th>
 					</tr>
 				</thead>
 				<tbody class="divide-y divide-slate-700/50">
 					{#if filteredGames.length === 0}
 						<tr>
-							<td colspan="6" class="px-4 py-16 text-center">
+							<td colspan="7" class="px-4 py-16 text-center">
 								<div class="flex flex-col items-center gap-4 text-slate-400">
 									<svg class="w-16 h-16 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1065,29 +1066,28 @@
 									{/if}
 								</div>
 							</td>
+							<!-- AutoDL column -->
+							<td class="px-4 py-3">
+								<div class="flex rounded-lg overflow-hidden border border-slate-600/50 text-[10px] font-medium">
+									<button
+										onclick={() => setGameAutoDownload(game.id, null)}
+										class="px-2 py-1.5 transition-colors {(perGameAutoDownload[game.id] ?? null) === null ? 'bg-slate-500 text-white' : 'bg-slate-800 text-slate-500 hover:text-slate-300'}"
+										title="Follow the global AutoDL setting (top toolbar)"
+									>Global</button>
+									<button
+										onclick={() => setGameAutoDownload(game.id, true)}
+										class="px-2 py-1.5 border-x border-slate-600/50 transition-colors {perGameAutoDownload[game.id] === true ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-500 hover:text-emerald-400'}"
+										title="Always auto-download this game, regardless of global setting"
+									>Always</button>
+									<button
+										onclick={() => setGameAutoDownload(game.id, false)}
+										class="px-2 py-1.5 transition-colors {perGameAutoDownload[game.id] === false ? 'bg-red-700 text-white' : 'bg-slate-800 text-slate-500 hover:text-red-400'}"
+										title="Never auto-download this game, regardless of global setting"
+									>Never</button>
+								</div>
+							</td>
 							<td class="px-4 py-3">
 								<div class="flex flex-wrap gap-1.5">
-									<!-- Per-game Auto-Download toggle -->
-									<div class="flex items-center gap-1 shrink-0">
-										<span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide select-none">AutoDL:</span>
-										<div class="flex rounded-lg overflow-hidden border border-slate-600/50 text-[10px] font-medium">
-											<button
-												onclick={() => setGameAutoDownload(game.id, null)}
-												class="px-2 py-1.5 transition-colors {(perGameAutoDownload[game.id] ?? null) === null ? 'bg-slate-500 text-white' : 'bg-slate-800 text-slate-500 hover:text-slate-300'}"
-												title="Follow the global AutoDL setting (top toolbar)"
-											>Global</button>
-											<button
-												onclick={() => setGameAutoDownload(game.id, true)}
-												class="px-2 py-1.5 border-x border-slate-600/50 transition-colors {perGameAutoDownload[game.id] === true ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-500 hover:text-emerald-400'}"
-												title="Always auto-download this game, regardless of global setting"
-											>Always</button>
-											<button
-												onclick={() => setGameAutoDownload(game.id, false)}
-												class="px-2 py-1.5 transition-colors {perGameAutoDownload[game.id] === false ? 'bg-red-700 text-white' : 'bg-slate-800 text-slate-500 hover:text-red-400'}"
-												title="Never auto-download this game, regardless of global setting"
-											>Never</button>
-										</div>
-									</div>
 									<button
 										onclick={() => (editGameId = game.id)}
 										class="group px-2.5 py-1.5 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-500 hover:to-slate-600 text-white text-xs font-medium rounded-lg transition-all shadow-md hover:shadow-slate-500/30 flex items-center gap-1.5"
