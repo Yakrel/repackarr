@@ -84,6 +84,45 @@
 	let altSpeedMode = $state<0 | 1 | null>(null);
 	let altSpeedToggling = $state(false);
 
+	// Global auto-download toggle
+	let autoDownloadEnabled = $state<boolean>(false);
+	let autoDownloadToggling = $state(false);
+	// Per-game auto-download override: null = use global, true = always, false = never
+	let perGameAutoDownload = $state<Record<number, boolean | null>>({});
+
+	async function fetchAutoDownloadSetting() {
+		try {
+			const resp = await fetch('/api/settings/auto-download');
+			if (resp.ok) {
+				const data = await resp.json();
+				autoDownloadEnabled = data.enabled ?? false;
+			}
+		} catch { /* ignore */ }
+	}
+
+	async function toggleAutoDownload() {
+		autoDownloadToggling = true;
+		try {
+			const resp = await fetch('/api/settings/auto-download', { method: 'POST' });
+			if (resp.ok) {
+				const data = await resp.json();
+				autoDownloadEnabled = data.enabled ?? autoDownloadEnabled;
+			}
+		} catch { /* ignore */ }
+		autoDownloadToggling = false;
+	}
+
+	async function setGameAutoDownload(gameId: number, value: boolean | null) {
+		perGameAutoDownload = { ...perGameAutoDownload, [gameId]: value };
+		try {
+			await fetch(`/api/games/${gameId}/auto-download`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ enabled: value })
+			});
+		} catch { /* ignore */ }
+	}
+
 	async function fetchSpeedMode() {
 		try {
 			const resp = await fetch('/api/qbit/speed-mode');
@@ -165,6 +204,13 @@
 	$effect(() => {
 		fetchQbitStatus();
 		fetchSpeedMode();
+		fetchAutoDownloadSetting();
+		// Initialize per-game auto-download state from loaded data
+		const initial: Record<number, boolean | null> = {};
+		for (const game of data.games) {
+			initial[game.id] = game.autoDownloadEnabled ?? null;
+		}
+		perGameAutoDownload = initial;
 		const statusInterval = setInterval(fetchQbitStatus, 5000);
 		const speedInterval = setInterval(fetchSpeedMode, 10000);
 		return () => {
@@ -180,6 +226,7 @@
 		gameTitle = '';
 		searchQuery = '';
 		suggestions = [];
+		mode = 'download_now';
 	}
 
 	function closeSkippedModal() {
@@ -266,11 +313,20 @@
 				const foundCount = result.data?.foundReleases || 0;
 				const redirectToDashboard = result.data?.redirectToDashboard;
 				const message = result.data?.message;
+				const autoDownloaded = result.data?.autoDownloaded;
+				const autoDownloadVersion = result.data?.autoDownloadVersion;
 				
 				if (redirectToDashboard) {
-					const successMsg = foundCount > 0 
-						? `Game added! Found ${foundCount} releases. You can see them on the Dashboard.`
-						: 'Game added! Searching for releases in the background...';
+					let successMsg: string;
+					if (autoDownloaded) {
+						successMsg = autoDownloadVersion
+							? `Game added! v${autoDownloadVersion} is being downloaded automatically.`
+							: 'Game added! Best release is being downloaded automatically.';
+					} else if (foundCount > 0) {
+						successMsg = `Game added! Found ${foundCount} releases. You can see them on the Dashboard.`;
+					} else {
+						successMsg = 'Game added! Searching for releases in the background...';
+					}
 					
 					toastStore.success(successMsg, 'Add Game');
 					setTimeout(() => goto('/'), 1500);
@@ -648,6 +704,32 @@
 				{altSpeedMode === 1 ? 'Throttled' : 'Normal'}
 			</button>
 		{/if}
+
+		<!-- Global Auto-Download Toggle -->
+		<button
+			onclick={toggleAutoDownload}
+			disabled={autoDownloadToggling}
+			title={autoDownloadEnabled
+				? 'Auto-Download ON — Best high-tier releases are downloaded automatically. Click to disable.'
+				: 'Auto-Download OFF — Releases are shown on dashboard for manual selection. Click to enable.'}
+			class="px-3 py-2 text-sm font-medium rounded-lg border transition-all flex items-center gap-2 whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed
+				{autoDownloadEnabled
+					? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30'
+					: 'bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-slate-200'}"
+		>
+			{#if autoDownloadToggling}
+				<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+			{:else}
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					{#if autoDownloadEnabled}
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+					{:else}
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+					{/if}
+				</svg>
+			{/if}
+			Auto-DL {autoDownloadEnabled ? 'ON' : 'OFF'}
+		</button>
 	</div>
 
 	<!-- Stats -->
@@ -979,7 +1061,25 @@
 								</div>
 							</td>
 							<td class="px-4 py-3">
-								<div class="flex gap-1.5">
+								<div class="flex flex-wrap gap-1.5">
+									<!-- Per-game Auto-Download toggle -->
+									<div class="flex rounded-lg overflow-hidden border border-slate-600/50 text-[10px] font-medium shrink-0" title="Auto-Download override for this game">
+										<button
+											onclick={() => setGameAutoDownload(game.id, null)}
+											class="px-2 py-1.5 transition-colors {(perGameAutoDownload[game.id] ?? null) === null ? 'bg-slate-500 text-white' : 'bg-slate-800 text-slate-500 hover:text-slate-300'}"
+											title="Use global auto-download setting"
+										>Global</button>
+										<button
+											onclick={() => setGameAutoDownload(game.id, true)}
+											class="px-2 py-1.5 border-x border-slate-600/50 transition-colors {perGameAutoDownload[game.id] === true ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-500 hover:text-emerald-400'}"
+											title="Always auto-download for this game"
+										>Always</button>
+										<button
+											onclick={() => setGameAutoDownload(game.id, false)}
+											class="px-2 py-1.5 transition-colors {perGameAutoDownload[game.id] === false ? 'bg-red-700 text-white' : 'bg-slate-800 text-slate-500 hover:text-red-400'}"
+											title="Never auto-download for this game"
+										>Never</button>
+									</div>
 									<button
 										onclick={() => (editGameId = game.id)}
 										class="group px-2.5 py-1.5 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-500 hover:to-slate-600 text-white text-xs font-medium rounded-lg transition-all shadow-md hover:shadow-slate-500/30 flex items-center gap-1.5"
@@ -1192,25 +1292,65 @@
 					<p class="text-xs text-slate-500 mt-1.5">Comma-separated keywords to skip for this game only</p>
 				</div>
 
-				<!-- Options -->
-				<div class="space-y-3">
-					<label class="flex items-center gap-3 p-4 bg-slate-900/50 border border-slate-700/50 rounded-xl cursor-pointer hover:bg-slate-800/50 transition-all group">
-						<div class="relative flex items-center">
-							<input 
-								type="checkbox" 
-								name="search_now" 
-								checked={true}
-								class="peer h-5 w-5 cursor-pointer appearance-none rounded-md border border-slate-600 transition-all checked:border-purple-500 checked:bg-purple-500"
-							/>
-							<svg class="pointer-events-none absolute h-5 w-5 stroke-white opacity-0 peer-checked:opacity-100" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-							</svg>
-						</div>
-						<div class="flex-1">
-							<div class="text-sm font-medium text-white">Find existing releases</div>
-							<div class="text-[10px] text-slate-500">Add currently available releases to your dashboard. Leave unchecked to only track future updates.</div>
-						</div>
-					</label>
+				<!-- Mode Selection Cards -->
+				<div>
+					<p class="block text-sm font-medium text-slate-300 mb-3">What do you want to do?</p>
+					<!-- Hidden input to carry the actual value -->
+					<input type="hidden" name="search_now" value={mode === 'download_now' ? 'on' : 'off'} />
+					<div class="grid grid-cols-2 gap-3">
+						<!-- Card: I Want This Game (Search Now) -->
+						<button
+							type="button"
+							onclick={() => (mode = 'download_now')}
+							class="relative flex flex-col gap-2 p-4 rounded-xl border-2 text-left transition-all
+								{mode === 'download_now'
+									? 'border-purple-500 bg-purple-500/10'
+									: 'border-slate-700 bg-slate-900/50 hover:border-slate-500'}"
+						>
+							{#if mode === 'download_now'}
+								<div class="absolute top-2 right-2 w-4 h-4 rounded-full bg-purple-500 flex items-center justify-center">
+									<svg class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+								</div>
+							{/if}
+							<div class="flex items-center gap-2">
+								<svg class="w-5 h-5 {mode === 'download_now' ? 'text-purple-400' : 'text-slate-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+								</svg>
+								<span class="text-sm font-semibold {mode === 'download_now' ? 'text-white' : 'text-slate-300'}">I Want This Game</span>
+							</div>
+							<p class="text-[10px] text-slate-400 leading-relaxed">Searches for available releases.</p>
+							{#if autoDownloadEnabled}
+								<p class="text-[10px] text-emerald-400 font-medium">⚡ Auto-DL ON — best match will download automatically.</p>
+							{:else}
+								<p class="text-[10px] text-slate-500">Releases will be shown on dashboard for manual selection.</p>
+							{/if}
+						</button>
+
+						<!-- Card: I Already Have It (Track Only) -->
+						<button
+							type="button"
+							onclick={() => (mode = 'track_only')}
+							class="relative flex flex-col gap-2 p-4 rounded-xl border-2 text-left transition-all
+								{mode === 'track_only'
+									? 'border-blue-500 bg-blue-500/10'
+									: 'border-slate-700 bg-slate-900/50 hover:border-slate-500'}"
+						>
+							{#if mode === 'track_only'}
+								<div class="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">
+									<svg class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+								</div>
+							{/if}
+							<div class="flex items-center gap-2">
+								<svg class="w-5 h-5 {mode === 'track_only' ? 'text-blue-400' : 'text-slate-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+								</svg>
+								<span class="text-sm font-semibold {mode === 'track_only' ? 'text-white' : 'text-slate-300'}">I Already Have It</span>
+							</div>
+							<p class="text-[10px] text-slate-400 leading-relaxed">Sets current version as baseline. Monitors for future updates only.</p>
+							<p class="text-[10px] text-slate-500">Use if you downloaded this game outside of Repackarr.</p>
+						</button>
+					</div>
 				</div>
 
 				<!-- Actions -->
@@ -1229,16 +1369,28 @@
 					<button
 						type="submit"
 						disabled={addingGame}
-						class="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-purple-800 hover:from-purple-700 hover:to-purple-900 disabled:from-purple-900 disabled:to-purple-950 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-purple-600/25 flex items-center justify-center gap-2 min-h-[44px]"
+						class="flex-1 px-4 py-3 bg-gradient-to-r
+							{mode === 'download_now'
+								? 'from-purple-600 to-purple-800 hover:from-purple-700 hover:to-purple-900 disabled:from-purple-900 disabled:to-purple-950'
+								: 'from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 disabled:from-blue-900 disabled:to-blue-950'}
+							disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 min-h-[44px]"
 					>
 						{#if addingGame}
 							<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
 								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
 								<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
 							</svg>
-							<span>Adding Game...</span>
+							<span>{mode === 'download_now' ? 'Searching releases...' : 'Adding game...'}</span>
+						{:else if mode === 'download_now'}
+							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+							</svg>
+							{autoDownloadEnabled ? 'Search & Auto-Download' : 'Search for Releases'}
 						{:else}
-							Add Game
+							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+							</svg>
+							Add & Track Only
 						{/if}
 					</button>
 				</div>

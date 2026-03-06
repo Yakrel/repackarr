@@ -6,6 +6,7 @@ import { searchForGame, type SkipInfo } from './prowlarr.js';
 import { progressManager } from './progress.js';
 import { logger, logError } from './logger.js';
 import { compareVersions } from './utils.js';
+import { tryAutoDownloadForGames } from './autoDownload.js';
 
 export async function runSyncLibrary(currentProgress?: { start: number, total: number }): Promise<number> {
     logger.info('Starting library sync from qBittorrent...');
@@ -110,6 +111,22 @@ export async function runSearchUpdates(currentProgress?: { start: number, total:
 
     } catch (error) {
         logError('Update search failed', error);
+    }
+
+    // Auto-download: attempt for all monitored games that now have qualifying releases
+    const monitoredGameIds = db
+        .select({ id: games.id })
+        .from(games)
+        .where(eq(games.status, 'monitored'))
+        .all()
+        .map((g) => g.id);
+
+    if (monitoredGameIds.length > 0) {
+        logger.info(`[Auto-Download] Running auto-download check for ${monitoredGameIds.length} game(s)...`);
+        const downloaded = await tryAutoDownloadForGames(monitoredGameIds);
+        if (downloaded > 0) {
+            logger.info(`[Auto-Download] Auto-downloaded ${downloaded} game(s).`);
+        }
     }
 
     const duration = (Date.now() - startTime) / 1000;

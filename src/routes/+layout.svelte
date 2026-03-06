@@ -3,6 +3,7 @@
 	import { browser } from '$app/environment';
 	import { invalidateAll } from '$app/navigation';
 	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
+	import NotificationPanel from '$lib/components/ui/NotificationPanel.svelte';
 	import { toastStore } from '$lib/stores/toast.js';
 
 	let { children } = $props();
@@ -281,6 +282,9 @@
 					{/if}
 					<span>Full Scan</span>
 				</button>
+
+				<!-- Notification Bell -->
+				<NotificationPanel />
 			</div>
 			
 			<!-- Progress Bar -->
