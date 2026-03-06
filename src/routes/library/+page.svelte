@@ -651,8 +651,8 @@
 
 <div class="p-6 space-y-6">
 
-	<div class="flex items-center justify-between gap-4">
-		<h2 class="text-2xl font-bold text-white">Game Library</h2>
+	<div class="flex items-center gap-4">
+		<h2 class="text-2xl font-bold text-white shrink-0">Game Library</h2>
 		
 		<div class="flex items-center gap-3 flex-1 max-w-2xl">
 			<!-- Search Bar -->
@@ -679,7 +679,8 @@
 				<option value="updates">Has Updates</option>
 			</select>
 		</div>
-		
+
+		<div class="flex items-center gap-2 ml-auto shrink-0">
 		<button
 			onclick={() => (showAddModal = true)}
 			class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
@@ -735,6 +736,7 @@
 			{/if}
 			Auto-DL {autoDownloadEnabled ? 'ON' : 'OFF'}
 		</button>
+		</div>
 	</div>
 
 	<!-- Stats -->
@@ -769,7 +771,7 @@
 						<th class="px-4 py-3 text-xs font-medium text-slate-400 uppercase">Status</th>
 						<th class="px-4 py-3 text-xs font-medium text-slate-400 uppercase">Updates</th>
 						<th class="px-4 py-3 text-xs font-medium text-slate-400 uppercase">Links</th>
-						<th class="px-4 py-3 text-xs font-medium text-slate-400 uppercase">AutoDL</th>
+						<th class="px-4 py-3 text-xs font-medium text-slate-400 uppercase whitespace-nowrap w-px">AutoDL</th>
 						<th class="px-4 py-3 text-xs font-medium text-slate-400 uppercase">Actions</th>
 					</tr>
 				</thead>
@@ -1067,7 +1069,7 @@
 								</div>
 							</td>
 							<!-- AutoDL column -->
-							<td class="px-4 py-3">
+							<td class="px-4 py-3 w-px whitespace-nowrap">
 								<div class="flex rounded-lg overflow-hidden border border-slate-600/50 text-[10px] font-medium">
 									<button
 										onclick={() => setGameAutoDownload(game.id, null)}
