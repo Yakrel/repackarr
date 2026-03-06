@@ -107,6 +107,11 @@
 			if (resp.ok) {
 				const data = await resp.json();
 				autoDownloadEnabled = data.enabled ?? autoDownloadEnabled;
+				if (autoDownloadEnabled) {
+					toastStore.info('AutoDL enabled — eligible games will be downloaded on the next scan.', 'Auto-Download');
+				} else {
+					toastStore.info('AutoDL disabled — releases will appear on the Dashboard for manual selection.', 'Auto-Download');
+				}
 			}
 		} catch { /* ignore */ }
 		autoDownloadToggling = false;
@@ -710,8 +715,8 @@
 			onclick={toggleAutoDownload}
 			disabled={autoDownloadToggling}
 			title={autoDownloadEnabled
-				? 'Auto-Download ON — Best high-tier releases are downloaded automatically. Click to disable.'
-				: 'Auto-Download OFF — Releases are shown on dashboard for manual selection. Click to enable.'}
+				? 'AutoDL ON — Best matching releases are downloaded automatically on each scan. Click to disable.'
+				: 'AutoDL OFF — Releases appear on Dashboard for manual selection. Click to enable. Takes effect on the next scan.'}
 			class="px-3 py-2 text-sm font-medium rounded-lg border transition-all flex items-center gap-2 whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed
 				{autoDownloadEnabled
 					? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30'
@@ -1063,22 +1068,25 @@
 							<td class="px-4 py-3">
 								<div class="flex flex-wrap gap-1.5">
 									<!-- Per-game Auto-Download toggle -->
-									<div class="flex rounded-lg overflow-hidden border border-slate-600/50 text-[10px] font-medium shrink-0" title="Auto-Download override for this game">
-										<button
-											onclick={() => setGameAutoDownload(game.id, null)}
-											class="px-2 py-1.5 transition-colors {(perGameAutoDownload[game.id] ?? null) === null ? 'bg-slate-500 text-white' : 'bg-slate-800 text-slate-500 hover:text-slate-300'}"
-											title="Use global auto-download setting"
-										>Global</button>
-										<button
-											onclick={() => setGameAutoDownload(game.id, true)}
-											class="px-2 py-1.5 border-x border-slate-600/50 transition-colors {perGameAutoDownload[game.id] === true ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-500 hover:text-emerald-400'}"
-											title="Always auto-download for this game"
-										>Always</button>
-										<button
-											onclick={() => setGameAutoDownload(game.id, false)}
-											class="px-2 py-1.5 transition-colors {perGameAutoDownload[game.id] === false ? 'bg-red-700 text-white' : 'bg-slate-800 text-slate-500 hover:text-red-400'}"
-											title="Never auto-download for this game"
-										>Never</button>
+									<div class="flex items-center gap-1 shrink-0">
+										<span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide select-none">AutoDL:</span>
+										<div class="flex rounded-lg overflow-hidden border border-slate-600/50 text-[10px] font-medium">
+											<button
+												onclick={() => setGameAutoDownload(game.id, null)}
+												class="px-2 py-1.5 transition-colors {(perGameAutoDownload[game.id] ?? null) === null ? 'bg-slate-500 text-white' : 'bg-slate-800 text-slate-500 hover:text-slate-300'}"
+												title="Follow the global AutoDL setting (top toolbar)"
+											>Global</button>
+											<button
+												onclick={() => setGameAutoDownload(game.id, true)}
+												class="px-2 py-1.5 border-x border-slate-600/50 transition-colors {perGameAutoDownload[game.id] === true ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-500 hover:text-emerald-400'}"
+												title="Always auto-download this game, regardless of global setting"
+											>Always</button>
+											<button
+												onclick={() => setGameAutoDownload(game.id, false)}
+												class="px-2 py-1.5 transition-colors {perGameAutoDownload[game.id] === false ? 'bg-red-700 text-white' : 'bg-slate-800 text-slate-500 hover:text-red-400'}"
+												title="Never auto-download this game, regardless of global setting"
+											>Never</button>
+										</div>
 									</div>
 									<button
 										onclick={() => (editGameId = game.id)}
