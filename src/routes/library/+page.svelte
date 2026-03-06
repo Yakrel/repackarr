@@ -654,7 +654,8 @@
 	<div class="flex items-center gap-4">
 		<h2 class="text-2xl font-bold text-white shrink-0">Game Library</h2>
 		
-		<div class="flex items-center gap-3 flex-1 max-w-2xl">
+		<div class="flex-1 flex justify-center">
+		<div class="flex items-center gap-3 w-full max-w-2xl">
 			<!-- Search Bar -->
 			<div class="relative flex-1">
 				<input
@@ -679,8 +680,9 @@
 				<option value="updates">Has Updates</option>
 			</select>
 		</div>
+		</div>
 
-		<div class="flex items-center gap-2 ml-auto shrink-0">
+		<div class="flex items-center gap-2 shrink-0">
 		<button
 			onclick={() => (showAddModal = true)}
 			class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
