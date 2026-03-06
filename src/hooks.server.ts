@@ -35,7 +35,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 		const decoded = atob(auth.slice(6));
 		const [username, password] = decoded.split(':');
 
-		const validUser = username === settings.AUTH_USERNAME;
+		const validUser = timingSafeEqual(
+			Buffer.from(username ?? ''),
+			Buffer.from(settings.AUTH_USERNAME)
+		);
 		const expectedHash = createHash('sha256').update(settings.AUTH_PASSWORD).digest();
 		const actualHash = createHash('sha256').update(password ?? '').digest();
 		const validPass = timingSafeEqual(expectedHash, actualHash);

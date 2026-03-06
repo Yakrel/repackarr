@@ -20,6 +20,6 @@ export const POST: RequestHandler = async ({ url }) => {
 		return json({ success: true });
 	} catch (error) {
 		logger.error(`Scan failed: ${error}`);
-		return json({ success: false, error: String(error) }, { status: 500 });
+		return json({ success: false, error: 'Internal server error' }, { status: 500 });
 	}
 };

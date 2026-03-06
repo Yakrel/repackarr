@@ -26,6 +26,6 @@ export const POST: RequestHandler = async () => {
 		const error = await authResp.text();
 		return json({ success: false, message: `Authentication failed: ${error.slice(0, 50)}` });
 	} catch (error) {
-		return json({ success: false, message: `Error: ${String(error).slice(0, 100)}` }, { status: 500 });
+		return json({ success: false, message: 'IGDB test failed' }, { status: 500 });
 	}
 };

@@ -9,6 +9,6 @@ export const POST: RequestHandler = async () => {
 		return json({ success: true, added: synced });
 	} catch (error) {
 		logger.error('Sync error:', error);
-		return json({ success: false, message: String(error).slice(0, 100) }, { status: 500 });
+		return json({ success: false, message: 'Internal server error' }, { status: 500 });
 	}
 };
