@@ -249,12 +249,10 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 			}
 			await new Promise((r) => setTimeout(r, 1000));
 		}
-		if (metadataReceived) {
-			await qbitService.recheckTorrent(newHash);
-		} else {
+		if (!metadataReceived) {
 			logger.warn(`[Auto-Download] Metadata not received for '${game.title}' within 30s`);
-			await qbitService.recheckTorrent(newHash);
 		}
+		await qbitService.recheckTorrent(newHash);
 	}
 
 	// Update database atomically

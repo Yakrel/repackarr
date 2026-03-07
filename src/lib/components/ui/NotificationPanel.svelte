@@ -14,7 +14,6 @@
 	let notifications = $state<Notification[]>([]);
 	let unreadCount = $state(0);
 	let panelOpen = $state(false);
-	let loading = $state(false);
 
 	async function fetchNotifications() {
 		try {
