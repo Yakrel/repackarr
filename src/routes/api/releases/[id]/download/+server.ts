@@ -87,11 +87,17 @@ export const POST: RequestHandler = async ({ params }) => {
 	// Only after successful qBit addition, update database in a transaction
 	// This ensures atomicity: either all DB updates succeed or none do
 	try {
+		const nextRawName = release.rawTitle;
+		const nextInfoHash = newHash ?? null;
+		const nextSourceUrl = release.infoUrl ?? null;
 		transaction(() => {
 			// Update game version
 			db.update(games)
 				.set({
 					currentVersionDate: release.uploadDate,
+					rawName: nextRawName,
+					infoHash: nextInfoHash,
+					sourceUrl: nextSourceUrl,
 					...(release.parsedVersion ? { currentVersion: release.parsedVersion } : {})
 				})
 				.where(eq(games.id, game.id))

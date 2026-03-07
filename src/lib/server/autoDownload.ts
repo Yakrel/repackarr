@@ -259,10 +259,16 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 
 	// Update database atomically
 	try {
+		const nextRawName = release.rawTitle;
+		const nextInfoHash = newHash ?? null;
+		const nextSourceUrl = release.infoUrl ?? null;
 		transaction(() => {
 			db.update(games)
 				.set({
 					currentVersionDate: release.uploadDate,
+					rawName: nextRawName,
+					infoHash: nextInfoHash,
+					sourceUrl: nextSourceUrl,
 					...(release.parsedVersion ? { currentVersion: release.parsedVersion } : {})
 				})
 				.where(eq(games.id, game.id))
