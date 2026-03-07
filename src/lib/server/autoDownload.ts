@@ -1,6 +1,6 @@
 import { db, transaction } from './database.js';
 import { games, releases, notifications, appSettings } from './schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, lt } from 'drizzle-orm';
 import { qbitService } from './qbit.js';
 import { compareVersions, estimateVersionConfidence } from './utils.js';
 import { logger } from './logger.js';
@@ -131,7 +131,7 @@ async function createNotification(
 		// Auto-cleanup: delete read notifications older than 30 days
 		const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 		db.delete(notifications).where(
-			and(eq(notifications.isRead, true))
+			and(eq(notifications.isRead, true), lt(notifications.createdAt, cutoff))
 		).run();
 	} catch (err) {
 		logger.warn(`Failed to create notification: ${err}`);
