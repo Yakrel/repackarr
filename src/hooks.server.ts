@@ -5,6 +5,17 @@ import { logger, logError } from '$lib/server/logger.js';
 import { building } from '$app/environment';
 import { timingSafeEqual, createHash } from 'crypto';
 
+function hashCredential(value: string): Buffer {
+	return createHash('sha256').update(value).digest();
+}
+
+function unauthorizedResponse(message: string): Response {
+	return new Response(message, {
+		status: 401,
+		headers: { 'WWW-Authenticate': 'Basic realm="Repackarr"' }
+	});
+}
+
 // Initialize application on server start
 if (!building) {
 	try {
@@ -26,28 +37,27 @@ export const handle: Handle = async ({ event, resolve }) => {
 		const auth = event.request.headers.get('authorization');
 
 		if (!auth || !auth.startsWith('Basic ')) {
-			return new Response('Authentication required', {
-				status: 401,
-				headers: { 'WWW-Authenticate': 'Basic realm="Repackarr"' }
-			});
+			return unauthorizedResponse('Authentication required');
 		}
 
-		const decoded = atob(auth.slice(6));
-		const [username, password] = decoded.split(':');
+		let decoded: string;
+		try {
+			decoded = atob(auth.slice(6));
+		} catch {
+			return unauthorizedResponse('Invalid credentials');
+		}
 
-		const validUser = timingSafeEqual(
-			Buffer.from(username ?? ''),
-			Buffer.from(settings.AUTH_USERNAME)
-		);
-		const expectedHash = createHash('sha256').update(settings.AUTH_PASSWORD).digest();
-		const actualHash = createHash('sha256').update(password ?? '').digest();
+		const separatorIndex = decoded.indexOf(':');
+		const username = separatorIndex === -1 ? decoded : decoded.slice(0, separatorIndex);
+		const password = separatorIndex === -1 ? '' : decoded.slice(separatorIndex + 1);
+
+		const validUser = timingSafeEqual(hashCredential(username), hashCredential(settings.AUTH_USERNAME));
+		const expectedHash = hashCredential(settings.AUTH_PASSWORD);
+		const actualHash = hashCredential(password);
 		const validPass = timingSafeEqual(expectedHash, actualHash);
 
 		if (!validUser || !validPass) {
-			return new Response('Invalid credentials', {
-				status: 401,
-				headers: { 'WWW-Authenticate': 'Basic realm="Repackarr"' }
-			});
+			return unauthorizedResponse('Invalid credentials');
 		}
 	}
 

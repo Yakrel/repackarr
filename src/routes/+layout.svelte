@@ -5,6 +5,7 @@
 	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
 	import NotificationPanel from '$lib/components/ui/NotificationPanel.svelte';
 	import { toastStore } from '$lib/stores/toast.js';
+	import { APP_VERSION } from '$lib/version.js';
 
 	let { children } = $props();
 
@@ -13,7 +14,7 @@
 		{ href: '/library', label: 'Library', icon: 'library' },
 		{ href: '/settings', label: 'Settings', icon: 'settings' }
 	];
-	const appVersion = '0.1.1';
+	const appVersion = APP_VERSION;
 	const changelog = [
 		{
 			version: '0.1.1',
@@ -45,6 +46,7 @@
 		startedAt: null as string | null
 	});
 	let eventSource: EventSource | null = null;
+	let hasSeenActiveScan = false;
 
 	function getIcon(icon: string) {
 		const icons: Record<string, string> = {
@@ -55,31 +57,37 @@
 		return icons[icon] || icons.home;
 	}
 
-	function startProgressTracking() {
+	function stopProgressTracking() {
 		if (eventSource) {
 			eventSource.close();
+			eventSource = null;
 		}
-		
+
+		hasSeenActiveScan = false;
+	}
+
+	function startProgressTracking() {
+		stopProgressTracking();
 		eventSource = new EventSource('/api/scan/progress');
 		eventSource.onmessage = (event) => {
 			try {
 				const data = JSON.parse(event.data);
 				scanProgress = data;
-				
-				if (!data.isScanning && eventSource) {
-					eventSource.close();
-					eventSource = null;
+
+				if (data.isScanning) {
+					hasSeenActiveScan = true;
+				}
+
+				if (hasSeenActiveScan && !data.isScanning) {
+					stopProgressTracking();
 				}
 			} catch (error) {
 				console.error('Error parsing progress:', error);
 			}
 		};
-		
+
 		eventSource.onerror = () => {
-			if (eventSource) {
-				eventSource.close();
-				eventSource = null;
-			}
+			stopProgressTracking();
 		};
 	}
 
@@ -90,6 +98,7 @@
 			const resp = await fetch('/api/sync-library', { method: 'POST' });
 			const result = await resp.json();
 			if (result.success) {
+				stopProgressTracking();
 				const count = result.added || 0;
 				if (count > 0) {
 					toastStore.success(`Synced ${count} game${count !== 1 ? 's' : ''}`, 'Sync Library');
@@ -98,9 +107,11 @@
 				}
 				await invalidateAll();
 			} else {
+				stopProgressTracking();
 				toastStore.error(result.message || 'Sync failed', 'Sync Library');
 			}
 		} catch {
+			stopProgressTracking();
 			toastStore.error('Network error', 'Sync Library');
 		} finally {
 			scanning = false;
@@ -114,12 +125,15 @@
 			const resp = await fetch('/api/check-updates', { method: 'POST' });
 			const result = await resp.json();
 			if (result.success) {
-				toastStore.success('Update check complete', 'Check Updates');
+				stopProgressTracking();
+				toastStore.success(result.message || 'Update check complete', 'Check Updates');
 				await invalidateAll();
 			} else {
+				stopProgressTracking();
 				toastStore.error(result.error || 'Search failed', 'Check Updates');
 			}
 		} catch {
+			stopProgressTracking();
 			toastStore.error('Network error', 'Check Updates');
 		} finally {
 			scanning = false;
@@ -133,12 +147,14 @@
 			const resp = await fetch('/api/scan?type=full', { method: 'POST' });
 			const result = await resp.json();
 			if (!result.success) {
+				stopProgressTracking();
 				toastStore.error(result.error || 'Scan failed', 'Full Scan');
 			} else {
 				toastStore.success('Full scan complete', 'Full Scan');
 				await invalidateAll();
 			}
 		} catch {
+			stopProgressTracking();
 			toastStore.error('Network error', 'Full Scan');
 		} finally {
 			scanning = false;
