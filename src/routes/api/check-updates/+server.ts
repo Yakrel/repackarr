@@ -6,23 +6,23 @@ import { logger } from '$lib/server/logger.js';
 
 export const POST: RequestHandler = async () => {
 	try {
-		// Start the search updates in background
-		runSearchUpdates().then(() => {
-			progressManager.complete();
-		});
-		
+		const scanned = await runSearchUpdates(undefined, { throwOnError: true });
+
 		return json({
 			success: true,
-			message: 'Update search started'
+			message: 'Update check complete',
+			scanned
 		});
 	} catch (error) {
 		logger.error('Error checking updates:', error);
 		return json(
 			{
 				success: false,
-				error: error instanceof Error ? error.message : 'Internal server error'
+				error: 'Internal server error'
 			},
 			{ status: 500 }
 		);
+	} finally {
+		progressManager.complete();
 	}
 };

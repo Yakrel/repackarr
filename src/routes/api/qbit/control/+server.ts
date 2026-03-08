@@ -8,8 +8,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		const body = await request.json();
 		const { action, hash } = body;
 
-		if (!hash || typeof hash !== 'string') {
-			return json({ error: 'Missing hash' }, { status: 400 });
+		if (!hash || typeof hash !== 'string' || !/^[a-fA-F0-9]{40}$/.test(hash)) {
+			return json({ error: 'Invalid hash' }, { status: 400 });
 		}
 
 		let ok = false;

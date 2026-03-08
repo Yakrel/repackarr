@@ -9,17 +9,21 @@ export const POST: RequestHandler = async ({ url }) => {
 
 	try {
 		if (type === 'sync') {
-			await runSyncLibrary();
-			await progressManager.complete();
+			const synced = await runSyncLibrary(undefined, { throwOnError: true });
+			return json({ success: true, added: synced });
 		} else if (type === 'updates') {
-			await runSearchUpdates();
-			await progressManager.complete();
+			const scanned = await runSearchUpdates(undefined, { throwOnError: true });
+			return json({ success: true, scanned });
 		} else {
 			await runScanCycle();
+			return json({ success: true });
 		}
-		return json({ success: true });
 	} catch (error) {
 		logger.error(`Scan failed: ${error}`);
-		return json({ success: false, error: String(error) }, { status: 500 });
+		return json({ success: false, error: 'Internal server error' }, { status: 500 });
+	} finally {
+		if (type !== 'full') {
+			progressManager.complete();
+		}
 	}
 };

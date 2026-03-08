@@ -4,6 +4,7 @@ import { db } from '$lib/server/database.js';
 import { games, releases } from '$lib/server/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { extractVersion } from '$lib/server/utils.js';
+import { validateDownloadUrl } from '$lib/server/validators.js';
 import { logger } from '$lib/server/logger.js';
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -13,6 +14,14 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		if (!gameId || !title) {
 			return json({ success: false, error: 'Missing required fields' }, { status: 400 });
+		}
+
+		// Validate provided URLs if present
+		if (magnetUrl !== undefined && magnetUrl !== null && !validateDownloadUrl(magnetUrl)) {
+			return json({ success: false, error: 'Invalid magnet/download URL' }, { status: 400 });
+		}
+		if (infoUrl !== undefined && infoUrl !== null && !validateDownloadUrl(infoUrl)) {
+			return json({ success: false, error: 'Invalid info URL' }, { status: 400 });
 		}
 
 		// Check if game exists

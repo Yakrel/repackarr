@@ -35,6 +35,6 @@ export const POST: RequestHandler = async ({ params }) => {
 		}));
 	} catch (error) {
 		logger.error(`Reset scan failed for game ${id}:`, error);
-		return json(errorResponse('Search failed: ' + String(error).slice(0, 80)), { status: 500 });
+		return json(errorResponse('Search failed'), { status: 500 });
 	}
 };

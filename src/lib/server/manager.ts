@@ -6,8 +6,16 @@ import { searchForGame, type SkipInfo } from './prowlarr.js';
 import { progressManager } from './progress.js';
 import { logger, logError } from './logger.js';
 import { compareVersions } from './utils.js';
+import { tryAutoDownloadForGames } from './autoDownload.js';
 
-export async function runSyncLibrary(currentProgress?: { start: number, total: number }): Promise<number> {
+type ScanOptions = {
+	throwOnError?: boolean;
+};
+
+export async function runSyncLibrary(
+	currentProgress?: { start: number; total: number },
+	options: ScanOptions = {}
+): Promise<number> {
     logger.info('Starting library sync from qBittorrent...');
     try {
         if (currentProgress) {
@@ -26,16 +34,23 @@ export async function runSyncLibrary(currentProgress?: { start: number, total: n
         return synced;
     } catch (error) {
         logError('Library sync failed', error);
+        if (options.throwOnError) {
+            throw error;
+        }
         return 0;
     }
 }
 
-export async function runSearchUpdates(currentProgress?: { start: number, total: number }): Promise<number> {
+export async function runSearchUpdates(
+	currentProgress?: { start: number; total: number },
+	options: ScanOptions = {}
+): Promise<number> {
     const startTime = Date.now();
     logger.info('Starting Prowlarr update search...');
     let scanned = 0, totalFound = 0, totalAdded = 0;
     const scanDetails: string[] = [];
     const allSkipped: Array<{ game: string; game_id: number; items: SkipInfo[] }> = [];
+    let fatalError: unknown = null;
 
     try {
         const monitoredGames = db.select().from(games).where(eq(games.status, 'monitored')).all();
@@ -110,6 +125,23 @@ export async function runSearchUpdates(currentProgress?: { start: number, total:
 
     } catch (error) {
         logError('Update search failed', error);
+        fatalError = error;
+    }
+
+    // Auto-download: attempt for all monitored games that now have qualifying releases
+    const monitoredGameIds = db
+        .select({ id: games.id })
+        .from(games)
+        .where(eq(games.status, 'monitored'))
+        .all()
+        .map((g) => g.id);
+
+    if (monitoredGameIds.length > 0) {
+        logger.info(`[Auto-Download] Running auto-download check for ${monitoredGameIds.length} game(s)...`);
+        const downloaded = await tryAutoDownloadForGames(monitoredGameIds);
+        if (downloaded > 0) {
+            logger.info(`[Auto-Download] Auto-downloaded ${downloaded} game(s).`);
+        }
     }
 
     const duration = (Date.now() - startTime) / 1000;
@@ -117,11 +149,19 @@ export async function runSearchUpdates(currentProgress?: { start: number, total:
         db.insert(scanLogs).values({
             startedAt: new Date(startTime).toISOString(), durationSeconds: duration,
             gamesProcessed: scanned, updatesFound: totalAdded,
-            status: scanDetails.length ? 'partial_success' : 'success',
-            details: JSON.stringify({ total_results_found: totalFound, errors: scanDetails.slice(0, 10) }),
+            status: fatalError ? 'failed' : scanDetails.length ? 'partial_success' : 'success',
+            details: JSON.stringify({
+                total_results_found: totalFound,
+                errors: scanDetails.slice(0, 10),
+                fatal_error: fatalError instanceof Error ? fatalError.message : fatalError ? String(fatalError) : null
+            }),
             skipDetails: allSkipped.length ? JSON.stringify(allSkipped) : null
         }).run();
     } catch (e) { logError('Failed to save scan log', e); }
+
+    if (fatalError && options.throwOnError) {
+        throw fatalError;
+    }
 
     return scanned;
 }
