@@ -230,8 +230,15 @@
 		addingGame = false;
 		gameTitle = '';
 		searchQuery = '';
+		platformFilter = 'Windows';
 		suggestions = [];
+		showSuggestions = false;
 		mode = 'download_now';
+	}
+
+	function openAddModal() {
+		closeAddModal();
+		showAddModal = true;
 	}
 
 	function closeSkippedModal() {
@@ -274,9 +281,7 @@
 			// Esc to close modals
 			if (e.key === 'Escape') {
 				if (showAddModal) {
-					showAddModal = false;
-					gameTitle = '';
-					searchQuery = '';
+					closeAddModal();
 				}
 				if (editGameId) {
 					editGameId = null;
@@ -334,18 +339,14 @@
 					}
 					
 					toastStore.success(successMsg, 'Add Game');
+					closeAddModal();
 					setTimeout(() => goto('/'), 1500);
 				} else {
 					toastStore.info(message || 'Game added to monitored list.', 'Add Game');
-					showAddModal = false;
+					closeAddModal();
 					await invalidateAll();
 				}
 				
-				// Clear form
-				addingGame = false;
-				gameTitle = '';
-				searchQuery = '';
-				platformFilter = 'Windows';
 			} else if (result.type === 'failure') {
 				toastStore.error(result.data?.error || 'Failed to add game');
 				addingGame = false; // Re-enable button on error
@@ -684,7 +685,7 @@
 
 		<div class="flex items-center gap-2 shrink-0">
 		<button
-			onclick={() => (showAddModal = true)}
+			onclick={openAddModal}
 			class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
 		>
 			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1369,11 +1370,7 @@
 				<div class="flex gap-3 pt-2">
 					<button
 						type="button"
-						onclick={() => {
-							showAddModal = false;
-							gameTitle = '';
-							searchQuery = '';
-						}}
+						onclick={closeAddModal}
 						class="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-xl transition-colors"
 					>
 						Cancel

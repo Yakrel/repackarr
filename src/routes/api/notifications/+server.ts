@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types.js';
 import { db } from '$lib/server/database.js';
 import { notifications } from '$lib/server/schema.js';
-import { desc } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 
 export const GET: RequestHandler = async () => {
 	const all = db
@@ -12,7 +12,11 @@ export const GET: RequestHandler = async () => {
 		.limit(50)
 		.all();
 
-	const unreadCount = all.filter((n) => !n.isRead).length;
+	const unreadCount = db
+		.select({ count: sql<number>`count(*)` })
+		.from(notifications)
+		.where(eq(notifications.isRead, false))
+		.get()?.count ?? 0;
 
 	return json({ notifications: all, unreadCount });
 };
