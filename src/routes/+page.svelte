@@ -289,15 +289,20 @@
 											{#if release.parsedVersion}
 												• v{release.parsedVersion}
 											{/if}
-											{#if release.recommendationTier === 'high' || release.recommendationTier === 'medium'}
+											{#if release.isRecommended}
 												<span
 													class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/15 text-[10px] font-semibold text-emerald-300"
-													title={`${release.recommendationReason || 'Scored recommendation'} • Score ${release.recommendationScore} • Version ${release.versionState}`}
+													title={`${release.recommendationReason || 'Recommended'} • Score ${release.recommendationScore} • Version ${release.versionState}`}
 												>
 													Recommended
 												</span>
 											{/if}
 										</p>
+										{#if release.isRecommended && release.recommendationReason}
+											<p class="mt-1 text-[11px] text-emerald-300/90">
+												AutoDL choice: {release.recommendationReason}
+											</p>
+										{/if}
 									</div>
 									<div class="flex gap-1.5 ml-3 shrink-0">
 									{#if actionFeedback[release.id]}

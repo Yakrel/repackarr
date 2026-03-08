@@ -2,9 +2,9 @@ import { db, transaction } from './database.js';
 import { games, releases, notifications, appSettings } from './schema.js';
 import { eq, and, lt } from 'drizzle-orm';
 import { qbitService } from './qbit.js';
-import { compareVersions, estimateVersionConfidence } from './utils.js';
 import { logger } from './logger.js';
 import { extractMagnetHash } from './validators.js';
+import { rankGameReleases } from './releaseSelection.js';
 
 // qBittorrent states that indicate an active, in-progress download
 const ACTIVE_DOWNLOAD_STATES = new Set([
@@ -18,7 +18,6 @@ const ACTIVE_DOWNLOAD_STATES = new Set([
 	'moving'
 ]);
 
-const EPOCH_DATE = '1970-01-01T00:00:00.000Z';
 const METADATA_POLL_INTERVAL_MS = 1000;
 const METADATA_WAIT_TIMEOUT_MS = 10000;
 const AUTO_DOWNLOAD_CONCURRENCY = 3;
@@ -29,84 +28,6 @@ function isActivelyDownloading(state: string): boolean {
 
 function delay(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function getRecencyScore(uploadDate: string): number {
-	const ts = Date.parse(uploadDate);
-	if (!ts || isNaN(ts)) return 0;
-	const ageDays = (Date.now() - ts) / (1000 * 60 * 60 * 24);
-	return Math.max(0, Math.round(40 - ageDays * 0.9));
-}
-
-function getSeederScore(seeders: number | null): number {
-	if (!seeders || seeders <= 0) return 0;
-	const clamped = Math.min(seeders, 500);
-	return Math.round((Math.log10(clamped + 1) / Math.log10(501)) * 24);
-}
-
-function getGrabScore(grabs: number | null): number {
-	if (!grabs || grabs <= 0) return 0;
-	const clamped = Math.min(grabs, 1000);
-	return Math.round((Math.log10(clamped + 1) / Math.log10(1001)) * 10);
-}
-
-type AutoDownloadCandidate = {
-	release: typeof releases.$inferSelect;
-	score: number;
-	isTopCandidate: boolean; // true for new games with no owned version
-};
-
-function findBestCandidate(
-	gameReleases: Array<typeof releases.$inferSelect>,
-	game: typeof games.$inferSelect
-): AutoDownloadCandidate | null {
-	if (gameReleases.length === 0) return null;
-
-	const hasOwnedVersion = Boolean(
-		game.currentVersion &&
-			game.currentVersionDate &&
-			game.currentVersionDate !== EPOCH_DATE
-	);
-
-	// Find the latest version among all releases (for new-game "top candidate" logic)
-	let latestVersion: string | null = null;
-	for (const rel of gameReleases) {
-		if (!rel.parsedVersion) continue;
-		if (!latestVersion) {
-			latestVersion = rel.parsedVersion;
-			continue;
-		}
-		if (compareVersions(latestVersion, rel.parsedVersion) === -1) {
-			latestVersion = rel.parsedVersion;
-		}
-	}
-
-	const candidates: AutoDownloadCandidate[] = [];
-
-	for (const rel of gameReleases) {
-		const confidenceScore = Math.round((estimateVersionConfidence(rel.rawTitle, rel.parsedVersion) / 100) * 20);
-		const freshnessScore = getRecencyScore(rel.uploadDate);
-		const seederScore = getSeederScore(rel.seeders);
-		const grabScore = getGrabScore(rel.grabs);
-		const score = confidenceScore + freshnessScore + seederScore + grabScore;
-
-		if (hasOwnedVersion) {
-			// Only qualify if this release is newer than the owned version
-			if (!rel.parsedVersion) continue;
-			const cmp = compareVersions(game.currentVersion!, rel.parsedVersion);
-			if (cmp !== -1) continue; // not newer, skip
-			candidates.push({ release: rel, score, isTopCandidate: false });
-		} else {
-			// New game: only the top version candidate qualifies
-			if (!rel.parsedVersion || rel.parsedVersion !== latestVersion) continue;
-			candidates.push({ release: rel, score, isTopCandidate: true });
-		}
-	}
-
-	if (candidates.length === 0) return null;
-
-	// Return the highest scored candidate
-	return candidates.sort((a, b) => b.score - a.score)[0];
 }
 
 async function isAutoDownloadEnabledForGame(game: typeof games.$inferSelect): Promise<boolean> {
@@ -175,6 +96,8 @@ export type AutoDownloadResult = {
 	reason?: string;
 	releaseTitle?: string;
 	version?: string;
+	selectionReason?: string;
+	recommendationScore?: number;
 };
 
 /**
@@ -196,12 +119,16 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 		.where(and(eq(releases.gameId, gameId), eq(releases.isIgnored, false)))
 		.all();
 
-	const candidate = findBestCandidate(gameReleases, game);
-	if (!candidate) {
+	const { selectedRelease } = rankGameReleases(game, gameReleases);
+	if (!selectedRelease) {
 		return { success: false, skipped: true, reason: 'No qualifying release found' };
 	}
 
-	const { release } = candidate;
+	const release = selectedRelease;
+	const selectionReason = release.recommendationReason || 'Top-ranked auto-download candidate';
+	logger.info(
+		`[Auto-Download] Selected '${release.rawTitle}' for '${game.title}' (${selectionReason}; score: ${release.recommendationScore})`
+	);
 
 	// Check if the candidate version is the same as what we already have
 	if (release.parsedVersion && game.currentVersion === release.parsedVersion) {
@@ -209,7 +136,10 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 			success: false,
 			skipped: true,
 			reason: 'Already on this version',
-			version: release.parsedVersion
+			version: release.parsedVersion,
+			releaseTitle: release.rawTitle,
+			selectionReason,
+			recommendationScore: release.recommendationScore
 		};
 	}
 
@@ -226,7 +156,9 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 					skipped: true,
 					reason: 'Active download in progress',
 					releaseTitle: release.rawTitle,
-					version: release.parsedVersion ?? undefined
+					version: release.parsedVersion ?? undefined,
+					selectionReason,
+					recommendationScore: release.recommendationScore
 				};
 			}
 		} catch (err) {
@@ -241,7 +173,14 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 		const msg = `Failed to auto-download ${release.rawTitle} — no download link available.`;
 		logger.warn(`[Auto-Download] ${msg}`);
 		await createNotification('auto_download_failed', game.id, game.title, msg);
-		return { success: false, skipped: false, reason: 'No download URL', releaseTitle: release.rawTitle };
+		return {
+			success: false,
+			skipped: false,
+			reason: 'No download URL',
+			releaseTitle: release.rawTitle,
+			selectionReason,
+			recommendationScore: release.recommendationScore
+		};
 	}
 
 	// Remove old torrent from qBit (keep files on disk)
@@ -264,7 +203,9 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 			success: false,
 			skipped: false,
 			reason: 'qBittorrent add failed',
-			releaseTitle: release.rawTitle
+			releaseTitle: release.rawTitle,
+			selectionReason,
+			recommendationScore: release.recommendationScore
 		};
 	}
 
@@ -298,7 +239,14 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 		logger.error(`[Auto-Download] DB update failed after successful qBit add for '${game.title}': ${err}`);
 		const msg = `${release.rawTitle} was sent to qBittorrent but the database update failed. Please refresh.`;
 		await createNotification('auto_download_failed', game.id, game.title, msg);
-		return { success: false, skipped: false, reason: 'DB update failed', releaseTitle: release.rawTitle };
+		return {
+			success: false,
+			skipped: false,
+			reason: 'DB update failed',
+			releaseTitle: release.rawTitle,
+			selectionReason,
+			recommendationScore: release.recommendationScore
+		};
 	}
 
 	const versionStr = release.parsedVersion ? `v${release.parsedVersion}` : 'latest version';
@@ -310,7 +258,9 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 		success: true,
 		skipped: false,
 		releaseTitle: release.rawTitle,
-		version: release.parsedVersion ?? undefined
+		version: release.parsedVersion ?? undefined,
+		selectionReason,
+		recommendationScore: release.recommendationScore
 	};
 }
 

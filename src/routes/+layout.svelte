@@ -17,6 +17,17 @@
 	const appVersion = APP_VERSION;
 	const changelog = [
 		{
+			version: '0.1.2',
+			notes: [
+				'Auto-Download can now grab the best matching release for eligible games automatically',
+				'New notifications show when automatic downloads succeed, fail, or are skipped',
+				'You can control AutoDL globally or override it per game from the Library',
+				'Adding a game is clearer with "I Want This Game" and "I Already Have It" modes',
+				'Scans now start on launch and scheduled runs no longer overlap',
+				'Recommended releases now match the exact AutoDL choice'
+			]
+		},
+		{
 			version: '0.1.1',
 			notes: [
 				'Download and upload speed limits can now be set per torrent',
