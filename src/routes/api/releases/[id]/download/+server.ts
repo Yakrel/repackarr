@@ -4,13 +4,14 @@ import { db, transaction } from '$lib/server/database.js';
 import { releases, games } from '$lib/server/schema.js';
 import { eq } from 'drizzle-orm';
 import { qbitService } from '$lib/server/qbit.js';
-import { validateId, validateDownloadUrl, successResponse, errorResponse } from '$lib/server/validators.js';
+import {
+	validateId,
+	validateDownloadUrl,
+	successResponse,
+	errorResponse,
+	extractMagnetHash
+} from '$lib/server/validators.js';
 import { logger } from '$lib/server/logger.js';
-
-function extractMagnetHash(url: string): string | null {
-	const match = url.match(/btih:([a-fA-F0-9]{40})/i);
-	return match ? match[1].toLowerCase() : null;
-}
 
 export const POST: RequestHandler = async ({ params }) => {
         // Validate ID parameter

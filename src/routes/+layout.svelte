@@ -150,6 +150,7 @@
 				stopProgressTracking();
 				toastStore.error(result.error || 'Scan failed', 'Full Scan');
 			} else {
+				stopProgressTracking();
 				toastStore.success('Full scan complete', 'Full Scan');
 				await invalidateAll();
 			}

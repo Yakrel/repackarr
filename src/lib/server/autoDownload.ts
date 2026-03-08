@@ -4,6 +4,7 @@ import { eq, and, lt } from 'drizzle-orm';
 import { qbitService } from './qbit.js';
 import { compareVersions, estimateVersionConfidence } from './utils.js';
 import { logger } from './logger.js';
+import { extractMagnetHash } from './validators.js';
 
 // qBittorrent states that indicate an active, in-progress download
 const ACTIVE_DOWNLOAD_STATES = new Set([
@@ -18,11 +19,6 @@ const ACTIVE_DOWNLOAD_STATES = new Set([
 ]);
 
 const EPOCH_DATE = '1970-01-01T00:00:00.000Z';
-
-function extractMagnetHash(url: string): string | null {
-	const match = url.match(/btih:([a-fA-F0-9]{40})/i);
-	return match ? match[1].toLowerCase() : null;
-}
 
 function isActivelyDownloading(state: string): boolean {
 	return ACTIVE_DOWNLOAD_STATES.has(state);
