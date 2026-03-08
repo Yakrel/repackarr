@@ -101,6 +101,7 @@ All connection details are set via environment variables in your `.env` file:
 | `AUTH_USERNAME` | (None) | Enable Basic Auth for the UI |
 | `AUTH_PASSWORD` | (None) | Enable Basic Auth for the UI |
 | `DATA_DIR` | `/app/data` | Where the database is stored |
+| `LOG_DIR` | `/app/logs` | Where application log files are written |
 
 The following can also be changed directly from the **Settings** page in the UI:
 - **Ignored Keywords** — releases containing these keywords will be skipped globally.
