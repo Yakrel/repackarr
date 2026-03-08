@@ -19,9 +19,16 @@ const ACTIVE_DOWNLOAD_STATES = new Set([
 ]);
 
 const EPOCH_DATE = '1970-01-01T00:00:00.000Z';
+const METADATA_POLL_INTERVAL_MS = 1000;
+const METADATA_WAIT_TIMEOUT_MS = 10000;
+const AUTO_DOWNLOAD_CONCURRENCY = 3;
 
 function isActivelyDownloading(state: string): boolean {
 	return ACTIVE_DOWNLOAD_STATES.has(state);
+}
+
+function delay(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function getRecencyScore(uploadDate: string): number {
@@ -134,6 +141,34 @@ async function createNotification(
 	}
 }
 
+async function waitForMetadataAndRecheck(hash: string, gameTitle: string): Promise<void> {
+	const maxAttempts = Math.ceil(METADATA_WAIT_TIMEOUT_MS / METADATA_POLL_INTERVAL_MS);
+	let metadataReceived = false;
+
+	for (let attempt = 0; attempt < maxAttempts; attempt++) {
+		const torrent = await qbitService.getTorrent(hash);
+		if (torrent && torrent.total_size > 0) {
+			metadataReceived = true;
+			break;
+		}
+
+		if (attempt < maxAttempts - 1) {
+			await delay(METADATA_POLL_INTERVAL_MS);
+		}
+	}
+
+	if (!metadataReceived) {
+		logger.warn(
+			`[Auto-Download] Metadata not received for '${gameTitle}' within ${METADATA_WAIT_TIMEOUT_MS / 1000}s; requesting recheck anyway`
+		);
+	}
+
+	const recheckStarted = await qbitService.recheckTorrent(hash);
+	if (!recheckStarted) {
+		logger.warn(`[Auto-Download] Failed to trigger recheck for '${gameTitle}' (hash: ${hash})`);
+	}
+}
+
 export type AutoDownloadResult = {
 	success: boolean;
 	skipped: boolean;
@@ -233,22 +268,12 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 		};
 	}
 
-	// Wait for metadata (up to 30s) and trigger recheck
+	// Kick off metadata polling/recheck without blocking the scan/request lifecycle.
 	const newHash = extractMagnetHash(magnet);
 	if (newHash) {
-		let metadataReceived = false;
-		for (let i = 0; i < 30; i++) {
-			const torrent = await qbitService.getTorrent(newHash);
-			if (torrent && torrent.total_size > 0) {
-				metadataReceived = true;
-				break;
-			}
-			await new Promise((r) => setTimeout(r, 1000));
-		}
-		if (!metadataReceived) {
-			logger.warn(`[Auto-Download] Metadata not received for '${game.title}' within 30s`);
-		}
-		await qbitService.recheckTorrent(newHash);
+		void waitForMetadataAndRecheck(newHash, game.title).catch((err) => {
+			logger.warn(`[Auto-Download] Post-add processing failed for '${game.title}': ${String(err)}`);
+		});
 	}
 
 	// Update database atomically
@@ -295,13 +320,20 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
  */
 export async function tryAutoDownloadForGames(gameIds: number[]): Promise<number> {
 	let downloadCount = 0;
-	for (const gameId of gameIds) {
-		try {
-			const result = await tryAutoDownloadForGame(gameId);
-			if (result.success) downloadCount++;
-		} catch (err) {
-			logger.error(`[Auto-Download] Unexpected error for gameId ${gameId}: ${err}`);
-		}
+	for (let i = 0; i < gameIds.length; i += AUTO_DOWNLOAD_CONCURRENCY) {
+		const chunk = gameIds.slice(i, i + AUTO_DOWNLOAD_CONCURRENCY);
+		const results = await Promise.all(
+			chunk.map(async (gameId) => {
+				try {
+					return await tryAutoDownloadForGame(gameId);
+				} catch (err) {
+					logger.error(`[Auto-Download] Unexpected error for gameId ${gameId}: ${err}`);
+					return null;
+				}
+			})
+		);
+
+		downloadCount += results.filter((result) => result?.success).length;
 	}
 	return downloadCount;
 }
