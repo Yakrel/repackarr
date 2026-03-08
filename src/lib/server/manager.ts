@@ -128,20 +128,27 @@ export async function runSearchUpdates(
         fatalError = error;
     }
 
-    // Auto-download: attempt for all monitored games that now have qualifying releases
-    const monitoredGameIds = db
-        .select({ id: games.id })
-        .from(games)
-        .where(eq(games.status, 'monitored'))
-        .all()
-        .map((g) => g.id);
+    try {
+        // Auto-download: attempt for all monitored games that now have qualifying releases
+        const monitoredGameIds = db
+            .select({ id: games.id })
+            .from(games)
+            .where(eq(games.status, 'monitored'))
+            .all()
+            .map((g) => g.id);
 
-    if (monitoredGameIds.length > 0) {
-        logger.info(`[Auto-Download] Running auto-download check for ${monitoredGameIds.length} game(s)...`);
-        const downloaded = await tryAutoDownloadForGames(monitoredGameIds);
-        if (downloaded > 0) {
-            logger.info(`[Auto-Download] Auto-downloaded ${downloaded} game(s).`);
+        if (monitoredGameIds.length > 0) {
+            logger.info(`[Auto-Download] Running auto-download check for ${monitoredGameIds.length} game(s)...`);
+            const downloaded = await tryAutoDownloadForGames(monitoredGameIds);
+            if (downloaded > 0) {
+                logger.info(`[Auto-Download] Auto-downloaded ${downloaded} game(s).`);
+            }
         }
+    } catch (error) {
+        logError('Auto-download step failed', error);
+        scanDetails.push(
+            `Auto-download step: ${error instanceof Error ? error.message : String(error)}`
+        );
     }
 
     const duration = (Date.now() - startTime) / 1000;

@@ -106,6 +106,7 @@ function getVersionScore(
 ): number {
 	if (isAutoDownloadCandidate) return 40;
 	if (!hasCurrentVersion) return parsedVersion ? 12 : 8;
+	if (versionState === 'newer') return 40;
 	if (versionState === 'same') return 22;
 	if (versionState === 'unknown') return 12;
 	return 0;

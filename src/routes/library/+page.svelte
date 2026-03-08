@@ -6,7 +6,7 @@
 	import { goto, invalidateAll } from '$app/navigation';
 
 	let { data }: { data: PageData } = $props();
-	
+
 	// Modal states
 	let confirmModal = $state<{
 		show: boolean;
@@ -31,7 +31,7 @@
 	// Delete modal torrent options
 	let deleteModalDeleteFromQbit = $state(false);
 	let deleteModalDeleteFiles = $state(false);
-	
+
 	// Add game form state
 	let gameTitle = $state('');
 	let searchQuery = $state('');
@@ -43,7 +43,7 @@
 	let abortController: AbortController | null = null;
 	const localCache = new Map<string, Array<{ name: string; display: string }>>();
 	let isSearching = $state(false);
-	
+
 	// Edit game autocomplete state
 	let editSuggestions = $state<Array<{ name: string; display: string }>>([]);
 	let showEditSuggestions = $state(false);
@@ -223,7 +223,7 @@
 			clearInterval(speedInterval);
 		};
 	});
-	
+
 	// Helper functions for modal close
 	function closeAddModal() {
 		showAddModal = false;
@@ -245,24 +245,24 @@
 		showSkippedFor = null;
 		skippedReleases = [];
 	}
-	
+
 	// Search & Filter state
 	let librarySearchQuery = $state('');
 	let filterStatus = $state<'all' | 'monitored' | 'unmonitored' | 'updates'>('all');
-	
+
 	// Filtered games
 	let filteredGames = $derived.by(() => {
 		let games = data.games;
-		
+
 		// Apply search filter
 		if (librarySearchQuery.trim()) {
 			const query = librarySearchQuery.toLowerCase();
-			games = games.filter(g => 
+			games = games.filter(g =>
 				g.title.toLowerCase().includes(query) ||
 				g.searchQuery.toLowerCase().includes(query)
 			);
 		}
-		
+
 		// Apply status filter
 		if (filterStatus === 'monitored') {
 			games = games.filter(g => g.status === 'monitored');
@@ -271,10 +271,10 @@
 		} else if (filterStatus === 'updates') {
 			games = games.filter(g => g.updateCount > 0);
 		}
-		
+
 		return games;
 	});
-	
+
 	// Keyboard shortcuts
 	$effect(() => {
 		function handleKeydown(e: KeyboardEvent) {
@@ -292,7 +292,7 @@
 				}
 			}
 		}
-		
+
 		window.addEventListener('keydown', handleKeydown);
 		return () => window.removeEventListener('keydown', handleKeydown);
 	});
@@ -305,12 +305,12 @@
 	async function handleAddGame(e: Event) {
 		e.preventDefault();
 		if (addingGame) return; // Prevent double submission
-		
+
 		addingGame = true;
 
 		const formData = new FormData(e.target as HTMLFormElement);
 		const searchNow = formData.get('search_now') === 'on';
-		
+
 		try {
 			const resp = await fetch('?/addGame', {
 				method: 'POST',
@@ -318,14 +318,14 @@
 			});
 
 			const result = await resp.json();
-			
+
 			if (result.type === 'success') {
 				const foundCount = result.data?.foundReleases || 0;
 				const redirectToDashboard = result.data?.redirectToDashboard;
 				const message = result.data?.message;
 				const autoDownloaded = result.data?.autoDownloaded;
 				const autoDownloadVersion = result.data?.autoDownloadVersion;
-				
+
 				if (redirectToDashboard) {
 					let successMsg: string;
 					if (autoDownloaded) {
@@ -337,7 +337,7 @@
 					} else {
 						successMsg = 'Game added! Searching for releases in the background...';
 					}
-					
+
 					toastStore.success(successMsg, 'Add Game');
 					closeAddModal();
 					setTimeout(() => goto('/'), 1500);
@@ -346,7 +346,7 @@
 					closeAddModal();
 					await invalidateAll();
 				}
-				
+
 			} else if (result.type === 'failure') {
 				toastStore.error(result.data?.error || 'Failed to add game');
 				addingGame = false; // Re-enable button on error
@@ -397,12 +397,12 @@
 		try {
 			const formData = new FormData();
 			formData.append('id', gameId.toString());
-			
+
 			const resp = await fetch('?/toggleMonitor', {
 				method: 'POST',
 				body: formData
 			});
-			
+
 			const result = await resp.json();
 			if (result.type === 'success') {
 				await invalidateAll();
@@ -416,13 +416,13 @@
 		const input = e.target as HTMLInputElement;
 		gameTitle = input.value;
 		const query = gameTitle.toLowerCase();
-		
+
 		if (gameTitle) {
 			searchQuery = gameTitle.toLowerCase();
 		}
 
 		if (autocompleteTimeout) clearTimeout(autocompleteTimeout);
-		
+
 		if (gameTitle.length < 2) {
 			suggestions = [];
 			showSuggestions = false;
@@ -463,7 +463,7 @@
 				});
 				const data = await resp.json();
 				const newSuggestions = data.suggestions || [];
-				
+
 				suggestions = newSuggestions;
 				if (newSuggestions.length > 0) {
 					localCache.set(cacheKey, newSuggestions);
@@ -488,9 +488,9 @@
 		const input = e.target as HTMLInputElement;
 		const title = input.value;
 		const query = title.toLowerCase();
-		
+
 		if (editAutocompleteTimeout) clearTimeout(editAutocompleteTimeout);
-		
+
 		if (title.length < 2) {
 			editSuggestions = [];
 			showEditSuggestions = false;
@@ -527,7 +527,7 @@
 				});
 				const data = await resp.json();
 				const newSuggestions = data.suggestions || [];
-				
+
 				editSuggestions = newSuggestions;
 				if (newSuggestions.length > 0) {
 					editLocalCache.set(query, newSuggestions);
@@ -585,10 +585,10 @@
 
 	async function forceAddRelease(skip: SkipInfo) {
 		if (!showSkippedFor) return;
-		
+
 		// Show immediate feedback
 		toastStore.info('Adding release...', 'Restore Release');
-		
+
 		try {
 			const resp = await fetch('/api/releases/force-add', {
 				method: 'POST',
@@ -603,7 +603,7 @@
 					date: skip.date
 				})
 			});
-			
+
 			const result = await resp.json();
 			if (result.success) {
 				// Show success feedback
@@ -622,17 +622,17 @@
 
 	async function handleEditGame(e: Event) {
 		e.preventDefault();
-		
+
 		const formData = new FormData(e.target as HTMLFormElement);
-		
+
 		try {
 			const resp = await fetch('?/updateGame', {
 				method: 'POST',
 				body: formData
 			});
-			
+
 			const result = await resp.json();
-			
+
 			if (result.type === 'success') {
 				toastStore.success('Game updated successfully!', 'Update Game');
 				editGameId = null;
@@ -654,45 +654,45 @@
 
 	<div class="flex items-center gap-4">
 		<h2 class="text-2xl font-bold text-white shrink-0">Game Library</h2>
-		
+
 		<div class="flex-1 flex justify-center">
-		<div class="flex items-center gap-3 w-full max-w-2xl">
-			<!-- Search Bar -->
-			<div class="relative flex-1">
-				<input
-					type="text"
-					bind:value={librarySearchQuery}
-					placeholder="Search games..."
-					class="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400 focus:outline-none focus:border-purple-500 transition-colors"
-				/>
-				<svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-				</svg>
+			<div class="flex items-center gap-3 w-full max-w-2xl">
+				<!-- Search Bar -->
+				<div class="relative flex-1">
+					<input
+						type="text"
+						bind:value={librarySearchQuery}
+						placeholder="Search games..."
+						class="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400 focus:outline-none focus:border-purple-500 transition-colors"
+					/>
+					<svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+					</svg>
+				</div>
+
+				<!-- Filter Dropdown -->
+				<select
+					bind:value={filterStatus}
+					class="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500 transition-colors cursor-pointer"
+				>
+					<option value="all">All Games</option>
+					<option value="monitored">Monitored</option>
+					<option value="unmonitored">Unmonitored</option>
+					<option value="updates">Has Updates</option>
+				</select>
 			</div>
-			
-			<!-- Filter Dropdown -->
-			<select
-				bind:value={filterStatus}
-				class="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500 transition-colors cursor-pointer"
-			>
-				<option value="all">All Games</option>
-				<option value="monitored">Monitored</option>
-				<option value="unmonitored">Unmonitored</option>
-				<option value="updates">Has Updates</option>
-			</select>
-		</div>
 		</div>
 
 		<div class="flex items-center gap-2 shrink-0">
-		<button
-			onclick={openAddModal}
-			class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
-		>
-			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-			</svg>
-			Add Game
-		</button>
+			<button
+				onclick={openAddModal}
+				class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+			>
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+				</svg>
+				Add Game
+			</button>
 
 		<!-- Alt Speed Mode (Turtle) Toggle -->
 		{#if altSpeedMode !== null}
@@ -808,7 +808,7 @@
 											alt={game.title}
 											class="w-16 h-24 rounded object-cover shrink-0 border border-slate-600 shadow-lg"
 											loading="lazy"
-											onerror={(e) => { 
+											onerror={(e) => {
 												const target = e.currentTarget as HTMLImageElement;
 												target.style.display = 'none';
 												const next = target.nextElementSibling as HTMLElement | null;
@@ -861,8 +861,8 @@
 													<span class="text-slate-300 font-mono">{status.progress}%</span>
 												</div>
 												<div class="h-1.5 w-full bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/30">
-													<div 
-														class="h-full rounded-full transition-all duration-700 ease-out {isDownloading ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)] animate-pulse' : isFinished ? 'bg-emerald-500' : 'bg-slate-500'}" 
+													<div
+														class="h-full rounded-full transition-all duration-700 ease-out {isDownloading ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)] animate-pulse' : isFinished ? 'bg-emerald-500' : 'bg-slate-500'}"
 														style="width: {status.progress}%"
 													></div>
 												</div>
@@ -1183,8 +1183,8 @@
 				<h3 class="text-xl font-bold text-white">Add Game</h3>
 				<p class="text-sm text-slate-400 mt-1">Add a new game to your library</p>
 			</div>
-			
-			<form 
+
+			<form
 				onsubmit={handleAddGame}
 				class="p-6 space-y-5"
 			>
@@ -1232,7 +1232,7 @@
 							autocomplete="off"
 							class="w-full px-4 py-3 bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent transition-all pr-10"
 						/>
-						
+
 						<!-- Status Icon -->
 						<div class="absolute right-3 top-1/2 -translate-y-1/2">
 							{#if isSearching}
@@ -1445,7 +1445,7 @@
 									class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm pr-10"
 									autocomplete="off"
 								/>
-								
+
 								<!-- Status Icon -->
 								<div class="absolute right-3 top-1/2 -translate-y-1/2">
 									{#if isEditingSearching}
@@ -1550,9 +1550,9 @@
 									for="edit_igdb_id"
 									class="block text-sm font-medium text-slate-300">IGDB ID (Optional)</label
 								>
-								<a 
-									href="https://www.igdb.com/search?q={encodeURIComponent(editGame.cleanTitle || editGame.title)}" 
-									target="_blank" 
+								<a
+									href="https://www.igdb.com/search?q={encodeURIComponent(editGame.cleanTitle || editGame.title)}"
+									target="_blank"
 									rel="noopener"
 									class="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors"
 								>

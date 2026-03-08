@@ -19,21 +19,21 @@
 		{
 			version: '0.1.2',
 			notes: [
-				'Auto-Download can now grab the best matching release for eligible games automatically',
-				'New notifications show when automatic downloads succeed, fail, or are skipped',
-				'You can control AutoDL globally or override it per game from the Library',
-				'Adding a game is clearer with "I Want This Game" and "I Already Have It" modes',
-				'Scans now start on launch and scheduled runs no longer overlap',
-				'Recommended releases now match the exact AutoDL choice'
+				'Auto-Download can now grab matching updates for you automatically',
+				'New notifications keep you posted when automatic downloads succeed, fail, or are skipped',
+				'You can control AutoDL for the whole library or set it per game',
+				'Adding a game is clearer with "I Want This Game" and "I Already Have It" choices',
+				'Scans now start automatically after launch and feel more reliable',
+				'Dashboard recommendations now line up better with what Auto-Download would pick'
 			]
 		},
 		{
 			version: '0.1.1',
 			notes: [
-				'Download and upload speed limits can now be set per torrent',
-				'Speed limits are now loaded from qBittorrent on page open',
-				'Upload speed is now shown in torrent status',
-				'Turtle mode toggle added to quickly throttle all speeds',
+				'You can now set download and upload limits per torrent',
+				'Current speed limits are loaded from qBittorrent when the page opens',
+				'Upload speed is now shown alongside download speed',
+				'Turtle mode makes it easy to slow everything down',
 				'Torrent control buttons redesigned for a cleaner look'
 			]
 		},
