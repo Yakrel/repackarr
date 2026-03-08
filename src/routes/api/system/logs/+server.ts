@@ -63,6 +63,6 @@ export const GET: RequestHandler = async ({ url }) => {
 
         } catch (error) {
                 logger.error('Log read API error:', error);
-                return json({ error: 'Failed to read logs', details: String(error) }, { status: 500 });
+                return json({ error: 'Failed to read logs' }, { status: 500 });
         }
 };

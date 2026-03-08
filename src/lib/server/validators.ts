@@ -55,6 +55,12 @@ export function validateDownloadUrl(url: string | null | undefined): boolean {
 	return trimmed.startsWith('magnet:') || trimmed.startsWith('http://') || trimmed.startsWith('https://');
 }
 
+export function extractMagnetHash(url: string | null | undefined): string | null {
+	if (!url) return null;
+	const match = url.match(/btih:([a-fA-F0-9]{40})/i);
+	return match ? match[1].toLowerCase() : null;
+}
+
 /**
  * Retry options for async operations
  */

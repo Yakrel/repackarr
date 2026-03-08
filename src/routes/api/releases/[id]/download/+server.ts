@@ -4,13 +4,14 @@ import { db, transaction } from '$lib/server/database.js';
 import { releases, games } from '$lib/server/schema.js';
 import { eq } from 'drizzle-orm';
 import { qbitService } from '$lib/server/qbit.js';
-import { validateId, validateDownloadUrl, successResponse, errorResponse } from '$lib/server/validators.js';
+import {
+	validateId,
+	validateDownloadUrl,
+	successResponse,
+	errorResponse,
+	extractMagnetHash
+} from '$lib/server/validators.js';
 import { logger } from '$lib/server/logger.js';
-
-function extractMagnetHash(url: string): string | null {
-	const match = url.match(/btih:([a-fA-F0-9]{40})/i);
-	return match ? match[1].toLowerCase() : null;
-}
 
 export const POST: RequestHandler = async ({ params }) => {
         // Validate ID parameter
@@ -87,11 +88,17 @@ export const POST: RequestHandler = async ({ params }) => {
 	// Only after successful qBit addition, update database in a transaction
 	// This ensures atomicity: either all DB updates succeed or none do
 	try {
+		const nextRawName = release.rawTitle;
+		const nextInfoHash = newHash ?? null;
+		const nextSourceUrl = release.infoUrl ?? null;
 		transaction(() => {
 			// Update game version
 			db.update(games)
 				.set({
 					currentVersionDate: release.uploadDate,
+					rawName: nextRawName,
+					infoHash: nextInfoHash,
+					sourceUrl: nextSourceUrl,
 					...(release.parsedVersion ? { currentVersion: release.parsedVersion } : {})
 				})
 				.where(eq(games.id, game.id))

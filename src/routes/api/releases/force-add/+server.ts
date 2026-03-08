@@ -4,7 +4,21 @@ import { db } from '$lib/server/database.js';
 import { games, releases } from '$lib/server/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { extractVersion } from '$lib/server/utils.js';
+import { validateDownloadUrl } from '$lib/server/validators.js';
 import { logger } from '$lib/server/logger.js';
+
+function normalizeOptionalUrl(value: unknown): { value: string | null; invalidType: boolean } {
+	if (value === undefined || value === null) {
+		return { value: null, invalidType: false };
+	}
+
+	if (typeof value !== 'string') {
+		return { value: null, invalidType: true };
+	}
+
+	const trimmed = value.trim();
+	return { value: trimmed === '' ? null : trimmed, invalidType: false };
+}
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
@@ -13,6 +27,24 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		if (!gameId || !title) {
 			return json({ success: false, error: 'Missing required fields' }, { status: 400 });
+		}
+
+		const normalizedMagnetUrl = normalizeOptionalUrl(magnetUrl);
+		if (normalizedMagnetUrl.invalidType) {
+			return json({ success: false, error: 'Invalid magnet/download URL' }, { status: 400 });
+		}
+
+		const normalizedInfoUrl = normalizeOptionalUrl(infoUrl);
+		if (normalizedInfoUrl.invalidType) {
+			return json({ success: false, error: 'Invalid info URL' }, { status: 400 });
+		}
+
+		// Validate provided URLs if present
+		if (normalizedMagnetUrl.value !== null && !validateDownloadUrl(normalizedMagnetUrl.value)) {
+			return json({ success: false, error: 'Invalid magnet/download URL' }, { status: 400 });
+		}
+		if (normalizedInfoUrl.value !== null && !validateDownloadUrl(normalizedInfoUrl.value)) {
+			return json({ success: false, error: 'Invalid info URL' }, { status: 400 });
 		}
 
 		// Check if game exists
@@ -53,8 +85,8 @@ export const POST: RequestHandler = async ({ request }) => {
 				parsedVersion,
 				uploadDate: uploadDate.toISOString(),
 				indexer: indexer || 'Unknown',
-				magnetUrl: magnetUrl || null,
-				infoUrl: infoUrl || null,
+				magnetUrl: normalizedMagnetUrl.value,
+				infoUrl: normalizedInfoUrl.value,
 				size: size || null,
 				isIgnored: false
 			})

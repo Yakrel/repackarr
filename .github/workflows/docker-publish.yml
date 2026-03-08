@@ -2,7 +2,7 @@ name: Docker Publish
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "beta" ]
     tags: [ 'v*.*.*' ]
   pull_request:
     branches: [ "main" ]
@@ -44,7 +44,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ steps.lowercase.outputs.repo_owner }}/repackarr
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=branch
+            type=raw,value=beta,enable=${{ github.ref == 'refs/heads/beta' }}
             type=semver,pattern={{version}}
 
       - name: Build and push Docker image

@@ -1,12 +1,16 @@
-import cron, { type ScheduledTask } from 'node-cron';
 import { settings, updateSettings } from './config.js';
 import { db, runMigrations } from './database.js';
 import { appSettings } from './schema.js';
 import { runScanCycle } from './manager.js';
 import { logger, logError } from './logger.js';
+import { APP_VERSION_LABEL } from '../version.js';
 
 type SchedulerState = {
-	cronJob: ScheduledTask | null;
+	intervalHandle: ReturnType<typeof setInterval> | null;
+	currentScan: Promise<void> | null;
+	initialized: boolean;
+	intervalMinutesOverride: number | null;
+	nextRunAt: string | null;
 };
 
 const globalScheduler = globalThis as typeof globalThis & {
@@ -14,17 +18,47 @@ const globalScheduler = globalThis as typeof globalThis & {
 };
 
 if (!globalScheduler.__repackarrSchedulerState) {
-	globalScheduler.__repackarrSchedulerState = { cronJob: null };
+	globalScheduler.__repackarrSchedulerState = {
+		intervalHandle: null,
+		currentScan: null,
+		initialized: false,
+		intervalMinutesOverride: null,
+		nextRunAt: null
+	};
 }
 
 const schedulerState = globalScheduler.__repackarrSchedulerState;
 
-function minutesToCron(minutes: number): string {
-	if (minutes < 60) return `*/${minutes} * * * *`;
-	const hours = Math.floor(minutes / 60);
-	const remainingMinutes = minutes % 60;
-	if (remainingMinutes === 0) return `0 */${hours} * * *`;
-	return `${remainingMinutes} */${hours} * * *`;
+function getIntervalMinutes(): number {
+	return schedulerState.intervalMinutesOverride ?? settings.CRON_INTERVAL_MINUTES;
+}
+
+function getIntervalMs(): number {
+	return getIntervalMinutes() * 60 * 1000;
+}
+
+function updateNextRunAt(intervalMs: number): void {
+	schedulerState.nextRunAt = new Date(Date.now() + intervalMs).toISOString();
+}
+
+async function runScheduledScan(trigger: 'startup' | 'interval'): Promise<void> {
+	if (schedulerState.currentScan) {
+		logger.warn(`[Scheduler] Skipping ${trigger} scan because another scan is already running.`);
+		return;
+	}
+
+	logger.info(`[Scheduler] Starting ${trigger} full scan...`);
+
+	const scanPromise = runScanCycle()
+		.catch((error) => logError(`[Scheduler] ${trigger} scan failed`, error))
+		.finally(() => {
+			if (schedulerState.currentScan === scanPromise) {
+				schedulerState.currentScan = null;
+			}
+		});
+
+	schedulerState.currentScan = scanPromise;
+	await scanPromise;
 }
 
 export function loadSettingsFromDb(): void {
@@ -55,32 +89,41 @@ export function loadSettingsFromDb(): void {
 }
 
 export function startScheduler(): void {
-	const cronExpression = minutesToCron(settings.CRON_INTERVAL_MINUTES);
+	const intervalMinutes = getIntervalMinutes();
+	const intervalMs = getIntervalMs();
 
-	if (schedulerState.cronJob) {
-		schedulerState.cronJob.stop();
+	if (schedulerState.intervalHandle) {
+		clearInterval(schedulerState.intervalHandle);
 	}
 
-	schedulerState.cronJob = cron.schedule(cronExpression, () => {
-		runScanCycle().catch((error) => logError('Scheduled scan failed', error));
-	});
+	updateNextRunAt(intervalMs);
+	schedulerState.intervalHandle = setInterval(() => {
+		updateNextRunAt(intervalMs);
+		void runScheduledScan('interval');
+	}, intervalMs);
 
 	logger.info(
-		`Scheduler started (interval: ${settings.CRON_INTERVAL_MINUTES} min, cron: ${cronExpression})`
+		`Scheduler started (interval: ${intervalMinutes} min, startup scan: enabled, next run at: ${schedulerState.nextRunAt})`
 	);
 }
 
 export function rescheduleJob(minutes: number): void {
-	settings.CRON_INTERVAL_MINUTES = minutes;
+	schedulerState.intervalMinutesOverride = minutes;
 	startScheduler();
 }
 
 export function initApp(): void {
-	logger.info(`Starting Repackarr v0.1.0`);
+	if (schedulerState.initialized) {
+		return;
+	}
+
+	logger.info(`Starting Repackarr ${APP_VERSION_LABEL}`);
 
 	runMigrations();
 
 	loadSettingsFromDb();
 
 	startScheduler();
+	schedulerState.initialized = true;
+	void runScheduledScan('startup');
 }

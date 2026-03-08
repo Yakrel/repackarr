@@ -6,7 +6,7 @@
 	import { goto, invalidateAll } from '$app/navigation';
 
 	let { data }: { data: PageData } = $props();
-	
+
 	// Modal states
 	let confirmModal = $state<{
 		show: boolean;
@@ -31,7 +31,7 @@
 	// Delete modal torrent options
 	let deleteModalDeleteFromQbit = $state(false);
 	let deleteModalDeleteFiles = $state(false);
-	
+
 	// Add game form state
 	let gameTitle = $state('');
 	let searchQuery = $state('');
@@ -43,7 +43,7 @@
 	let abortController: AbortController | null = null;
 	const localCache = new Map<string, Array<{ name: string; display: string }>>();
 	let isSearching = $state(false);
-	
+
 	// Edit game autocomplete state
 	let editSuggestions = $state<Array<{ name: string; display: string }>>([]);
 	let showEditSuggestions = $state(false);
@@ -83,6 +83,50 @@
 	// Global alt speed mode: 0 = normal, 1 = throttled (turtle)
 	let altSpeedMode = $state<0 | 1 | null>(null);
 	let altSpeedToggling = $state(false);
+
+	// Global auto-download toggle
+	let autoDownloadEnabled = $state<boolean>(false);
+	let autoDownloadToggling = $state(false);
+	// Per-game auto-download override: null = use global, true = always, false = never
+	let perGameAutoDownload = $state<Record<number, boolean | null>>({});
+
+	async function fetchAutoDownloadSetting() {
+		try {
+			const resp = await fetch('/api/settings/auto-download');
+			if (resp.ok) {
+				const data = await resp.json();
+				autoDownloadEnabled = data.enabled ?? false;
+			}
+		} catch { /* ignore */ }
+	}
+
+	async function toggleAutoDownload() {
+		autoDownloadToggling = true;
+		try {
+			const resp = await fetch('/api/settings/auto-download', { method: 'POST' });
+			if (resp.ok) {
+				const data = await resp.json();
+				autoDownloadEnabled = data.enabled ?? autoDownloadEnabled;
+				if (autoDownloadEnabled) {
+					toastStore.info('AutoDL enabled — eligible games will be downloaded on the next scan.', 'Auto-Download');
+				} else {
+					toastStore.info('AutoDL disabled — releases will appear on the Dashboard for manual selection.', 'Auto-Download');
+				}
+			}
+		} catch { /* ignore */ }
+		autoDownloadToggling = false;
+	}
+
+	async function setGameAutoDownload(gameId: number, value: boolean | null) {
+		perGameAutoDownload = { ...perGameAutoDownload, [gameId]: value };
+		try {
+			await fetch(`/api/games/${gameId}/auto-download`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ enabled: value })
+			});
+		} catch { /* ignore */ }
+	}
 
 	async function fetchSpeedMode() {
 		try {
@@ -165,6 +209,13 @@
 	$effect(() => {
 		fetchQbitStatus();
 		fetchSpeedMode();
+		fetchAutoDownloadSetting();
+		// Initialize per-game auto-download state from loaded data
+		const initial: Record<number, boolean | null> = {};
+		for (const game of data.games) {
+			initial[game.id] = game.autoDownloadEnabled ?? null;
+		}
+		perGameAutoDownload = initial;
 		const statusInterval = setInterval(fetchQbitStatus, 5000);
 		const speedInterval = setInterval(fetchSpeedMode, 10000);
 		return () => {
@@ -172,38 +223,46 @@
 			clearInterval(speedInterval);
 		};
 	});
-	
+
 	// Helper functions for modal close
 	function closeAddModal() {
 		showAddModal = false;
 		addingGame = false;
 		gameTitle = '';
 		searchQuery = '';
+		platformFilter = 'Windows';
 		suggestions = [];
+		showSuggestions = false;
+		mode = 'download_now';
+	}
+
+	function openAddModal() {
+		closeAddModal();
+		showAddModal = true;
 	}
 
 	function closeSkippedModal() {
 		showSkippedFor = null;
 		skippedReleases = [];
 	}
-	
+
 	// Search & Filter state
 	let librarySearchQuery = $state('');
 	let filterStatus = $state<'all' | 'monitored' | 'unmonitored' | 'updates'>('all');
-	
+
 	// Filtered games
 	let filteredGames = $derived.by(() => {
 		let games = data.games;
-		
+
 		// Apply search filter
 		if (librarySearchQuery.trim()) {
 			const query = librarySearchQuery.toLowerCase();
-			games = games.filter(g => 
+			games = games.filter(g =>
 				g.title.toLowerCase().includes(query) ||
 				g.searchQuery.toLowerCase().includes(query)
 			);
 		}
-		
+
 		// Apply status filter
 		if (filterStatus === 'monitored') {
 			games = games.filter(g => g.status === 'monitored');
@@ -212,19 +271,17 @@
 		} else if (filterStatus === 'updates') {
 			games = games.filter(g => g.updateCount > 0);
 		}
-		
+
 		return games;
 	});
-	
+
 	// Keyboard shortcuts
 	$effect(() => {
 		function handleKeydown(e: KeyboardEvent) {
 			// Esc to close modals
 			if (e.key === 'Escape') {
 				if (showAddModal) {
-					showAddModal = false;
-					gameTitle = '';
-					searchQuery = '';
+					closeAddModal();
 				}
 				if (editGameId) {
 					editGameId = null;
@@ -235,7 +292,7 @@
 				}
 			}
 		}
-		
+
 		window.addEventListener('keydown', handleKeydown);
 		return () => window.removeEventListener('keydown', handleKeydown);
 	});
@@ -248,12 +305,12 @@
 	async function handleAddGame(e: Event) {
 		e.preventDefault();
 		if (addingGame) return; // Prevent double submission
-		
+
 		addingGame = true;
 
 		const formData = new FormData(e.target as HTMLFormElement);
 		const searchNow = formData.get('search_now') === 'on';
-		
+
 		try {
 			const resp = await fetch('?/addGame', {
 				method: 'POST',
@@ -261,30 +318,35 @@
 			});
 
 			const result = await resp.json();
-			
+
 			if (result.type === 'success') {
 				const foundCount = result.data?.foundReleases || 0;
 				const redirectToDashboard = result.data?.redirectToDashboard;
 				const message = result.data?.message;
-				
+				const autoDownloaded = result.data?.autoDownloaded;
+				const autoDownloadVersion = result.data?.autoDownloadVersion;
+
 				if (redirectToDashboard) {
-					const successMsg = foundCount > 0 
-						? `Game added! Found ${foundCount} releases. You can see them on the Dashboard.`
-						: 'Game added! Searching for releases in the background...';
-					
+					let successMsg: string;
+					if (autoDownloaded) {
+						successMsg = autoDownloadVersion
+							? `Game added! v${autoDownloadVersion} is being downloaded automatically.`
+							: 'Game added! Best release is being downloaded automatically.';
+					} else if (foundCount > 0) {
+						successMsg = `Game added! Found ${foundCount} releases. You can see them on the Dashboard.`;
+					} else {
+						successMsg = 'Game added! Searching for releases in the background...';
+					}
+
 					toastStore.success(successMsg, 'Add Game');
+					closeAddModal();
 					setTimeout(() => goto('/'), 1500);
 				} else {
 					toastStore.info(message || 'Game added to monitored list.', 'Add Game');
-					showAddModal = false;
+					closeAddModal();
 					await invalidateAll();
 				}
-				
-				// Clear form
-				addingGame = false;
-				gameTitle = '';
-				searchQuery = '';
-				platformFilter = 'Windows';
+
 			} else if (result.type === 'failure') {
 				toastStore.error(result.data?.error || 'Failed to add game');
 				addingGame = false; // Re-enable button on error
@@ -335,12 +397,12 @@
 		try {
 			const formData = new FormData();
 			formData.append('id', gameId.toString());
-			
+
 			const resp = await fetch('?/toggleMonitor', {
 				method: 'POST',
 				body: formData
 			});
-			
+
 			const result = await resp.json();
 			if (result.type === 'success') {
 				await invalidateAll();
@@ -354,13 +416,13 @@
 		const input = e.target as HTMLInputElement;
 		gameTitle = input.value;
 		const query = gameTitle.toLowerCase();
-		
+
 		if (gameTitle) {
 			searchQuery = gameTitle.toLowerCase();
 		}
 
 		if (autocompleteTimeout) clearTimeout(autocompleteTimeout);
-		
+
 		if (gameTitle.length < 2) {
 			suggestions = [];
 			showSuggestions = false;
@@ -401,7 +463,7 @@
 				});
 				const data = await resp.json();
 				const newSuggestions = data.suggestions || [];
-				
+
 				suggestions = newSuggestions;
 				if (newSuggestions.length > 0) {
 					localCache.set(cacheKey, newSuggestions);
@@ -426,9 +488,9 @@
 		const input = e.target as HTMLInputElement;
 		const title = input.value;
 		const query = title.toLowerCase();
-		
+
 		if (editAutocompleteTimeout) clearTimeout(editAutocompleteTimeout);
-		
+
 		if (title.length < 2) {
 			editSuggestions = [];
 			showEditSuggestions = false;
@@ -465,7 +527,7 @@
 				});
 				const data = await resp.json();
 				const newSuggestions = data.suggestions || [];
-				
+
 				editSuggestions = newSuggestions;
 				if (newSuggestions.length > 0) {
 					editLocalCache.set(query, newSuggestions);
@@ -523,10 +585,10 @@
 
 	async function forceAddRelease(skip: SkipInfo) {
 		if (!showSkippedFor) return;
-		
+
 		// Show immediate feedback
 		toastStore.info('Adding release...', 'Restore Release');
-		
+
 		try {
 			const resp = await fetch('/api/releases/force-add', {
 				method: 'POST',
@@ -541,7 +603,7 @@
 					date: skip.date
 				})
 			});
-			
+
 			const result = await resp.json();
 			if (result.success) {
 				// Show success feedback
@@ -560,17 +622,17 @@
 
 	async function handleEditGame(e: Event) {
 		e.preventDefault();
-		
+
 		const formData = new FormData(e.target as HTMLFormElement);
-		
+
 		try {
 			const resp = await fetch('?/updateGame', {
 				method: 'POST',
 				body: formData
 			});
-			
+
 			const result = await resp.json();
-			
+
 			if (result.type === 'success') {
 				toastStore.success('Game updated successfully!', 'Update Game');
 				editGameId = null;
@@ -590,44 +652,47 @@
 
 <div class="p-6 space-y-6">
 
-	<div class="flex items-center justify-between gap-4">
-		<h2 class="text-2xl font-bold text-white">Game Library</h2>
-		
-		<div class="flex items-center gap-3 flex-1 max-w-2xl">
-			<!-- Search Bar -->
-			<div class="relative flex-1">
-				<input
-					type="text"
-					bind:value={librarySearchQuery}
-					placeholder="Search games..."
-					class="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400 focus:outline-none focus:border-purple-500 transition-colors"
-				/>
-				<svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-				</svg>
+	<div class="flex items-center gap-4">
+		<h2 class="text-2xl font-bold text-white shrink-0">Game Library</h2>
+
+		<div class="flex-1 flex justify-center">
+			<div class="flex items-center gap-3 w-full max-w-2xl">
+				<!-- Search Bar -->
+				<div class="relative flex-1">
+					<input
+						type="text"
+						bind:value={librarySearchQuery}
+						placeholder="Search games..."
+						class="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400 focus:outline-none focus:border-purple-500 transition-colors"
+					/>
+					<svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+					</svg>
+				</div>
+
+				<!-- Filter Dropdown -->
+				<select
+					bind:value={filterStatus}
+					class="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500 transition-colors cursor-pointer"
+				>
+					<option value="all">All Games</option>
+					<option value="monitored">Monitored</option>
+					<option value="unmonitored">Unmonitored</option>
+					<option value="updates">Has Updates</option>
+				</select>
 			</div>
-			
-			<!-- Filter Dropdown -->
-			<select
-				bind:value={filterStatus}
-				class="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500 transition-colors cursor-pointer"
-			>
-				<option value="all">All Games</option>
-				<option value="monitored">Monitored</option>
-				<option value="unmonitored">Unmonitored</option>
-				<option value="updates">Has Updates</option>
-			</select>
 		</div>
-		
-		<button
-			onclick={() => (showAddModal = true)}
-			class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
-		>
-			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-			</svg>
-			Add Game
-		</button>
+
+		<div class="flex items-center gap-2 shrink-0">
+			<button
+				onclick={openAddModal}
+				class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+			>
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+				</svg>
+				Add Game
+			</button>
 
 		<!-- Alt Speed Mode (Turtle) Toggle -->
 		{#if altSpeedMode !== null}
@@ -648,6 +713,33 @@
 				{altSpeedMode === 1 ? 'Throttled' : 'Normal'}
 			</button>
 		{/if}
+
+		<!-- Global Auto-Download Toggle -->
+		<button
+			onclick={toggleAutoDownload}
+			disabled={autoDownloadToggling}
+			title={autoDownloadEnabled
+				? 'AutoDL ON — Best matching releases are downloaded automatically on each scan. Click to disable.'
+				: 'AutoDL OFF — Releases appear on Dashboard for manual selection. Click to enable. Takes effect on the next scan.'}
+			class="px-3 py-2 text-sm font-medium rounded-lg border transition-all flex items-center gap-2 whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed
+				{autoDownloadEnabled
+					? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30'
+					: 'bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-slate-200'}"
+		>
+			{#if autoDownloadToggling}
+				<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+			{:else}
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					{#if autoDownloadEnabled}
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+					{:else}
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+					{/if}
+				</svg>
+			{/if}
+			Auto-DL {autoDownloadEnabled ? 'ON' : 'OFF'}
+		</button>
+		</div>
 	</div>
 
 	<!-- Stats -->
@@ -682,13 +774,14 @@
 						<th class="px-4 py-3 text-xs font-medium text-slate-400 uppercase">Status</th>
 						<th class="px-4 py-3 text-xs font-medium text-slate-400 uppercase">Updates</th>
 						<th class="px-4 py-3 text-xs font-medium text-slate-400 uppercase">Links</th>
+						<th class="px-4 py-3 text-xs font-medium text-slate-400 uppercase whitespace-nowrap w-px">AutoDL</th>
 						<th class="px-4 py-3 text-xs font-medium text-slate-400 uppercase">Actions</th>
 					</tr>
 				</thead>
 				<tbody class="divide-y divide-slate-700/50">
 					{#if filteredGames.length === 0}
 						<tr>
-							<td colspan="6" class="px-4 py-16 text-center">
+							<td colspan="7" class="px-4 py-16 text-center">
 								<div class="flex flex-col items-center gap-4 text-slate-400">
 									<svg class="w-16 h-16 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -715,7 +808,7 @@
 											alt={game.title}
 											class="w-16 h-24 rounded object-cover shrink-0 border border-slate-600 shadow-lg"
 											loading="lazy"
-											onerror={(e) => { 
+											onerror={(e) => {
 												const target = e.currentTarget as HTMLImageElement;
 												target.style.display = 'none';
 												const next = target.nextElementSibling as HTMLElement | null;
@@ -768,8 +861,8 @@
 													<span class="text-slate-300 font-mono">{status.progress}%</span>
 												</div>
 												<div class="h-1.5 w-full bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/30">
-													<div 
-														class="h-full rounded-full transition-all duration-700 ease-out {isDownloading ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)] animate-pulse' : isFinished ? 'bg-emerald-500' : 'bg-slate-500'}" 
+													<div
+														class="h-full rounded-full transition-all duration-700 ease-out {isDownloading ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)] animate-pulse' : isFinished ? 'bg-emerald-500' : 'bg-slate-500'}"
 														style="width: {status.progress}%"
 													></div>
 												</div>
@@ -978,8 +1071,28 @@
 									{/if}
 								</div>
 							</td>
+							<!-- AutoDL column -->
+							<td class="px-4 py-3 w-px whitespace-nowrap">
+								<div class="flex rounded-lg overflow-hidden border border-slate-600/50 text-[10px] font-medium">
+									<button
+										onclick={() => setGameAutoDownload(game.id, null)}
+										class="px-2 py-1.5 transition-colors {(perGameAutoDownload[game.id] ?? null) === null ? 'bg-slate-500 text-white' : 'bg-slate-800 text-slate-500 hover:text-slate-300'}"
+										title="Follow the global AutoDL setting (top toolbar)"
+									>Global</button>
+									<button
+										onclick={() => setGameAutoDownload(game.id, true)}
+										class="px-2 py-1.5 border-x border-slate-600/50 transition-colors {perGameAutoDownload[game.id] === true ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-500 hover:text-emerald-400'}"
+										title="Always auto-download this game, regardless of global setting"
+									>Always</button>
+									<button
+										onclick={() => setGameAutoDownload(game.id, false)}
+										class="px-2 py-1.5 transition-colors {perGameAutoDownload[game.id] === false ? 'bg-red-700 text-white' : 'bg-slate-800 text-slate-500 hover:text-red-400'}"
+										title="Never auto-download this game, regardless of global setting"
+									>Never</button>
+								</div>
+							</td>
 							<td class="px-4 py-3">
-								<div class="flex gap-1.5">
+								<div class="flex flex-wrap gap-1.5">
 									<button
 										onclick={() => (editGameId = game.id)}
 										class="group px-2.5 py-1.5 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-500 hover:to-slate-600 text-white text-xs font-medium rounded-lg transition-all shadow-md hover:shadow-slate-500/30 flex items-center gap-1.5"
@@ -1070,8 +1183,8 @@
 				<h3 class="text-xl font-bold text-white">Add Game</h3>
 				<p class="text-sm text-slate-400 mt-1">Add a new game to your library</p>
 			</div>
-			
-			<form 
+
+			<form
 				onsubmit={handleAddGame}
 				class="p-6 space-y-5"
 			>
@@ -1119,7 +1232,7 @@
 							autocomplete="off"
 							class="w-full px-4 py-3 bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent transition-all pr-10"
 						/>
-						
+
 						<!-- Status Icon -->
 						<div class="absolute right-3 top-1/2 -translate-y-1/2">
 							{#if isSearching}
@@ -1192,36 +1305,72 @@
 					<p class="text-xs text-slate-500 mt-1.5">Comma-separated keywords to skip for this game only</p>
 				</div>
 
-				<!-- Options -->
-				<div class="space-y-3">
-					<label class="flex items-center gap-3 p-4 bg-slate-900/50 border border-slate-700/50 rounded-xl cursor-pointer hover:bg-slate-800/50 transition-all group">
-						<div class="relative flex items-center">
-							<input 
-								type="checkbox" 
-								name="search_now" 
-								checked={true}
-								class="peer h-5 w-5 cursor-pointer appearance-none rounded-md border border-slate-600 transition-all checked:border-purple-500 checked:bg-purple-500"
-							/>
-							<svg class="pointer-events-none absolute h-5 w-5 stroke-white opacity-0 peer-checked:opacity-100" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-							</svg>
-						</div>
-						<div class="flex-1">
-							<div class="text-sm font-medium text-white">Find existing releases</div>
-							<div class="text-[10px] text-slate-500">Add currently available releases to your dashboard. Leave unchecked to only track future updates.</div>
-						</div>
-					</label>
+				<!-- Mode Selection Cards -->
+				<div>
+					<p class="block text-sm font-medium text-slate-300 mb-3">What do you want to do?</p>
+					<!-- Hidden input to carry the actual value -->
+					<input type="hidden" name="search_now" value={mode === 'download_now' ? 'on' : 'off'} />
+					<div class="grid grid-cols-2 gap-3">
+						<!-- Card: I Want This Game (Search Now) -->
+						<button
+							type="button"
+							onclick={() => (mode = 'download_now')}
+							class="relative flex flex-col gap-2 p-4 rounded-xl border-2 text-left transition-all
+								{mode === 'download_now'
+									? 'border-purple-500 bg-purple-500/10'
+									: 'border-slate-700 bg-slate-900/50 hover:border-slate-500'}"
+						>
+							{#if mode === 'download_now'}
+								<div class="absolute top-2 right-2 w-4 h-4 rounded-full bg-purple-500 flex items-center justify-center">
+									<svg class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+								</div>
+							{/if}
+							<div class="flex items-center gap-2">
+								<svg class="w-5 h-5 {mode === 'download_now' ? 'text-purple-400' : 'text-slate-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+								</svg>
+								<span class="text-sm font-semibold {mode === 'download_now' ? 'text-white' : 'text-slate-300'}">I Want This Game</span>
+							</div>
+							<p class="text-[10px] text-slate-400 leading-relaxed">Searches for available releases.</p>
+							{#if autoDownloadEnabled}
+								<p class="text-[10px] text-emerald-400 font-medium">⚡ Auto-DL ON — best match will download automatically.</p>
+							{:else}
+								<p class="text-[10px] text-slate-500">Releases will be shown on dashboard for manual selection.</p>
+							{/if}
+						</button>
+
+						<!-- Card: I Already Have It (Track Only) -->
+						<button
+							type="button"
+							onclick={() => (mode = 'track_only')}
+							class="relative flex flex-col gap-2 p-4 rounded-xl border-2 text-left transition-all
+								{mode === 'track_only'
+									? 'border-blue-500 bg-blue-500/10'
+									: 'border-slate-700 bg-slate-900/50 hover:border-slate-500'}"
+						>
+							{#if mode === 'track_only'}
+								<div class="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">
+									<svg class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+								</div>
+							{/if}
+							<div class="flex items-center gap-2">
+								<svg class="w-5 h-5 {mode === 'track_only' ? 'text-blue-400' : 'text-slate-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+								</svg>
+								<span class="text-sm font-semibold {mode === 'track_only' ? 'text-white' : 'text-slate-300'}">I Already Have It</span>
+							</div>
+							<p class="text-[10px] text-slate-400 leading-relaxed">Sets current version as baseline. Monitors for future updates only.</p>
+							<p class="text-[10px] text-slate-500">Use if you downloaded this game outside of Repackarr.</p>
+						</button>
+					</div>
 				</div>
 
 				<!-- Actions -->
 				<div class="flex gap-3 pt-2">
 					<button
 						type="button"
-						onclick={() => {
-							showAddModal = false;
-							gameTitle = '';
-							searchQuery = '';
-						}}
+						onclick={closeAddModal}
 						class="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-xl transition-colors"
 					>
 						Cancel
@@ -1229,16 +1378,28 @@
 					<button
 						type="submit"
 						disabled={addingGame}
-						class="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-purple-800 hover:from-purple-700 hover:to-purple-900 disabled:from-purple-900 disabled:to-purple-950 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-purple-600/25 flex items-center justify-center gap-2 min-h-[44px]"
+						class="flex-1 px-4 py-3 bg-gradient-to-r
+							{mode === 'download_now'
+								? 'from-purple-600 to-purple-800 hover:from-purple-700 hover:to-purple-900 disabled:from-purple-900 disabled:to-purple-950'
+								: 'from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 disabled:from-blue-900 disabled:to-blue-950'}
+							disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 min-h-[44px]"
 					>
 						{#if addingGame}
 							<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
 								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
 								<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
 							</svg>
-							<span>Adding Game...</span>
+							<span>{mode === 'download_now' ? 'Searching releases...' : 'Adding game...'}</span>
+						{:else if mode === 'download_now'}
+							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+							</svg>
+							{autoDownloadEnabled ? 'Search & Auto-Download' : 'Search for Releases'}
 						{:else}
-							Add Game
+							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+							</svg>
+							Add & Track Only
 						{/if}
 					</button>
 				</div>
@@ -1284,7 +1445,7 @@
 									class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm pr-10"
 									autocomplete="off"
 								/>
-								
+
 								<!-- Status Icon -->
 								<div class="absolute right-3 top-1/2 -translate-y-1/2">
 									{#if isEditingSearching}
@@ -1389,9 +1550,9 @@
 									for="edit_igdb_id"
 									class="block text-sm font-medium text-slate-300">IGDB ID (Optional)</label
 								>
-								<a 
-									href="https://www.igdb.com/search?q={encodeURIComponent(editGame.cleanTitle || editGame.title)}" 
-									target="_blank" 
+								<a
+									href="https://www.igdb.com/search?q={encodeURIComponent(editGame.cleanTitle || editGame.title)}"
+									target="_blank"
 									rel="noopener"
 									class="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors"
 								>

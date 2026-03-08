@@ -19,6 +19,7 @@ export const games = sqliteTable('game', {
 	sourceUrl: text('source_url'),
 	rawName: text('raw_name'), // Store the original torrent name for version healing
 	infoHash: text('info_hash'), // Store the unique torrent hash for precise healing
+	autoDownloadEnabled: integer('auto_download_enabled', { mode: 'boolean' }), // null=use global, true=always, false=never
 	createdAt: text('created_at')
 		.notNull()
 		.$defaultFn(() => new Date().toISOString()),
@@ -85,6 +86,23 @@ export const ignoredReleases = sqliteTable('ignored_release', {
 	index('idx_ignored_release_game_id').on(table.gameId)
 ]);
 
+export const notifications = sqliteTable('notification', {
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	type: text('type', {
+		enum: ['auto_download_success', 'auto_download_failed', 'auto_download_skipped']
+	}).notNull(),
+	gameId: integer('game_id').references(() => games.id, { onDelete: 'cascade' }),
+	gameTitle: text('game_title').notNull(),
+	message: text('message').notNull(),
+	isRead: integer('is_read', { mode: 'boolean' }).notNull().default(false),
+	createdAt: text('created_at')
+		.notNull()
+		.$defaultFn(() => new Date().toISOString())
+}, (table) => [
+	index('idx_notification_is_read').on(table.isRead),
+	index('idx_notification_created_at').on(table.createdAt)
+]);
+
 export type Game = typeof games.$inferSelect;
 export type NewGame = typeof games.$inferInsert;
 export type Release = typeof releases.$inferSelect;
@@ -92,3 +110,4 @@ export type NewRelease = typeof releases.$inferInsert;
 export type AppSetting = typeof appSettings.$inferSelect;
 export type ScanLog = typeof scanLogs.$inferSelect;
 export type IgnoredRelease = typeof ignoredReleases.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;

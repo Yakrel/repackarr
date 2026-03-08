@@ -3,14 +3,15 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Docker Image](https://img.shields.io/badge/docker-ghcr.io%2Fyakrel%2Frepackarr-blue?logo=docker)](https://ghcr.io/yakrel/repackarr)
 
-**Repackarr** is an automated manager for game repacks. It monitors your existing qBittorrent library, tracks updates through Prowlarr, and allows you to upgrade your games with a single click. Think of it as "Sonarr/Radarr" specifically tailored for the game repack community.
+**Repackarr** helps you keep your game repack library up to date. It reads what you already have in qBittorrent, checks Prowlarr for better or newer releases, and lets you either pick updates manually or automate the whole flow.
 
 ## How It Works
 
 ```
-1. Sync Library      →   Repackarr imports your games from qBittorrent and detects their current versions.
-2. Scan for Updates  →   Prowlarr indexers are searched on a schedule for newer releases of each game.
-3. One-Click Update  →   Found a newer version? Send the magnet directly to qBittorrent with a single click.
+1. Sync Library      →   Repackarr imports the games you already have in qBittorrent.
+2. Check for Updates →   It keeps looking for newer releases in the background and you can also scan anytime.
+3. Update Your Games →   Review releases on the Dashboard or turn on AutoDL for hands-off upgrades.
+4. Stay Informed     →   Notifications tell you when AutoDL succeeds, fails, or skips a game.
 ```
 
 ## Screenshots
@@ -26,15 +27,26 @@
 
 ## Features
 
-- **Automatic Library Sync**: Imports your existing games from qBittorrent automatically — no manual entry needed.
-- **Smart Version Detection**: Accurately reads the current version of each game from torrent titles and tracker pages, including all major repackers (FitGirl, DODI, ElAmigos, KaOs, and more).
-- **Scheduled Update Scanning**: Periodically searches your Prowlarr indexers for newer versions of every game in your library.
-- **Smart Filtering**: Automatically ignores mods, patches, soundtracks, console releases, and other non-game content so your dashboard stays clean.
-- **Game Covers & Metadata**: Displays game artwork and metadata fetched from IGDB, with autocomplete when adding games manually.
-- **One-Click Updates**: When a newer version is found, send it straight to qBittorrent with a single click.
-- **Flexible Monitoring**: Add a game silently (monitor only future updates) or immediately search for the latest version — your choice.
-- **Skip & Ignore**: Not interested in a specific release? Skip it or hide it permanently. Restore it anytime from the Blacklist tab.
-- **Scan History**: Every sync and update scan is logged. Review what was found, what was skipped, and why.
+- **Automatic Library Sync**: Pulls in the games you already manage in qBittorrent, so there is no big manual setup.
+- **Smart Version Detection**: Reads version info from torrent titles and tracker pages across the major repack sources.
+- **Automatic Update Checks**: Keeps an eye on your monitored games and looks for newer releases for you.
+- **Auto-Download When You Want It**: Turn AutoDL on for the whole library or fine-tune it per game.
+- **Notification Center**: See right away when an automatic download worked, failed, or was skipped.
+- **Game Covers & Metadata**: Adds artwork and cleaner game info with IGDB support.
+- **One-Click Updates**: Prefer manual control? Send a release to qBittorrent with one click.
+- **Flexible Add Modes**: Choose between “I Want This Game” and “I Already Have It” when adding a title.
+- **Skip & Ignore**: Hide releases you do not want and restore them later from the blacklist.
+- **Scan History**: Review what past syncs and update checks found.
+
+## Auto-Download & Notifications
+
+- Turn **AutoDL** on from the **Library** page when you want Repackarr to grab updates for you.
+- Leave it off if you prefer to review releases on the Dashboard first.
+- You can still override AutoDL for each game:
+  - **Use Global** → inherit the library-wide toggle
+  - **Always** → auto-download updates for this game even if the global toggle is off
+  - **Never** → keep this game manual even if the global toggle is on
+- Notifications in the top bar let you know when Repackarr downloads an update, cannot send one to qBittorrent, or skips a game that is already downloading.
 
 ## Getting Started (Docker)
 
@@ -64,7 +76,8 @@ services:
     restart: unless-stopped
     ports:
       - "8090:3000"
-    env_file: .env
+    env_file:
+      - .env
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -73,6 +86,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
 ```
 
 ### 4. Launch
@@ -80,6 +94,8 @@ services:
 docker compose up -d
 ```
 Open `http://your-ip:8090` and hit **Sync Library** to get started.
+
+After startup, Repackarr refreshes your library and begins checking for updates automatically.
 
 ## Configuration
 
@@ -98,17 +114,26 @@ All connection details are set via environment variables in your `.env` file:
 | `CRON_INTERVAL_MINUTES` | `360` | How often to scan for updates (in minutes) |
 | `AUTH_USERNAME` | (None) | Enable Basic Auth for the UI |
 | `AUTH_PASSWORD` | (None) | Enable Basic Auth for the UI |
-| `DATA_DIR` | `/app/data` | Where the database is stored |
+| `DATA_DIR` | `/app/data` | Where app data is stored. For the bundled Docker setup, set this to `./data` in your `.env`. |
+| `LOG_DIR` | `logs` | Where app logs are written. For the bundled Docker setup, set this to `./logs` in your `.env`. |
 
-The following can also be changed directly from the **Settings** page in the UI:
-- **Ignored Keywords** — releases containing these keywords will be skipped globally.
-- **Allowed Indexers** — restrict searches to specific Prowlarr indexers.
-- **Default Platform** — Windows, Linux, or macOS.
+The following controls are managed from the UI:
+
+- **Settings page**
+  - **Ignored Keywords** — releases containing these keywords will be skipped globally.
+  - **Allowed Indexers** — restrict searches to specific Prowlarr indexers.
+  - **Default Platform** — Windows, Linux, or macOS.
+- **Library page**
+  - **Global Auto-Download** — enable or disable automatic downloading for monitored games.
+  - **Per-game Auto-Download** — override the global AutoDL behavior for one title at a time.
+  - **Add Game Mode** — choose between immediate search/download flow or track-only monitoring when adding a game manually.
 
 ## Troubleshooting
 
 - **Games not found**: Try adjusting the "Search Query" for that game in the Library page to match how it appears on your indexer.
 - **Indexer not working**: The name in **Allowed Indexers** must match exactly what Prowlarr shows.
+- **Auto-download did not trigger**: Make sure AutoDL is enabled globally or for that specific game and that qBittorrent is reachable. If the game is already downloading, Repackarr will skip it and notify you.
+- **Need more detail?**: Check the log files in `LOG_DIR`.
 - **Database errors on startup**: Fix permissions with `chown -R 1000:1000 ./data`.
 - **Reverse proxy**: Works with Nginx Proxy Manager and Traefik using a standard WebSocket-enabled config.
 

@@ -4,6 +4,7 @@
 	import { enhance } from '$app/forms';
 	import { fade, slide } from 'svelte/transition';
 	import { flip } from 'svelte/animate';
+	import { APP_VERSION_LABEL } from '$lib/version.js';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -399,12 +400,12 @@
 						<div class="space-y-1">
 							<span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sync Interval</span>
 							<div class="text-sm text-slate-300 font-mono bg-slate-900/50 px-3 py-2 rounded-lg border border-slate-700/50">
-								Every {data.settings.CRON_INTERVAL_MINUTES} minutes
+								Runs once on startup, then every {data.settings.CRON_INTERVAL_MINUTES} minutes
 							</div>
 						</div>
 						<div class="space-y-1">
 							<span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Version</span>
-							<div class="text-sm text-slate-300 font-mono">v0.1.0</div>
+							<div class="text-sm text-slate-300 font-mono">{APP_VERSION_LABEL}</div>
 						</div>
 					</div>
 				</div>

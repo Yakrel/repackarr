@@ -9,6 +9,7 @@ import { getGameMetadata } from '$lib/server/igdb.js';
 import { searchForGame } from '$lib/server/prowlarr.js';
 import { logger } from '$lib/server/logger.js';
 import { qbitService } from '$lib/server/qbit.js';
+import { tryAutoDownloadForGame } from '$lib/server/autoDownload.js';
 
 const METADATA_BACKFILL_INTERVAL_MS = 30 * 60 * 1000;
 let metadataBackfillRunning = false;
@@ -152,6 +153,7 @@ export const actions: Actions = {
 			// If searchNow is FALSE, we want to "silently" track the game.
 			// We do this by setting the currentVersionDate to the latest found release date,
 			// and then deleting the found releases so they don't show up on dashboard.
+			// Auto-download does NOT fire in Track Only mode (user says "I already have this version").
 			if (!searchNow && searchResult.totalFound > 0) {
 				const allFound = db.select().from(releases).where(eq(releases.gameId, result.id)).all();
 				if (allFound.length > 0) {
@@ -188,11 +190,26 @@ export const actions: Actions = {
 				}
 			}
 
+			// Search Now mode: attempt auto-download for the best qualifying release
+			let autoDownloaded = false;
+			let autoDownloadVersion: string | undefined;
+			if (searchNow && searchResult.added > 0) {
+				try {
+					const adResult = await tryAutoDownloadForGame(result.id);
+					autoDownloaded = adResult.success;
+					autoDownloadVersion = adResult.version;
+				} catch (err) {
+					logger.warn(`Auto-download failed for new game '${result.title}': ${err}`);
+				}
+			}
+
 			return { 
 				success: true, 
 				gameId: result.id,
 				foundReleases: searchNow ? searchResult.added : 0,
-				redirectToDashboard: searchNow
+				redirectToDashboard: searchNow,
+				autoDownloaded,
+				autoDownloadVersion
 			};
 		}
 
