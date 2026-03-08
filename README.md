@@ -75,6 +75,8 @@ services:
       retries: 3
 ```
 
+Use `ghcr.io/yakrel/repackarr:latest` for the stable main build, or switch the tag to `ghcr.io/yakrel/repackarr:beta` when you want to test the current beta branch image.
+
 ### 4. Launch
 ```bash
 docker compose up -d
