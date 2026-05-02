@@ -102,6 +102,10 @@ export function startScheduler(): void {
 	if (schedulerState.intervalHandle) {
 		clearInterval(schedulerState.intervalHandle);
 	}
+	if (schedulerState.startupTimeoutHandle) {
+		clearTimeout(schedulerState.startupTimeoutHandle);
+		schedulerState.startupTimeoutHandle = null;
+	}
 
 	updateNextRunAt(intervalMs);
 	schedulerState.intervalHandle = setInterval(() => {

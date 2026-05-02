@@ -18,7 +18,7 @@ function pruneScanLogs(): void {
 	const keptLogIds = db
 		.select({ id: scanLogs.id })
 		.from(scanLogs)
-		.orderBy(desc(scanLogs.startedAt))
+		.orderBy(desc(scanLogs.id))
 		.limit(retention)
 		.all()
 		.map((log) => log.id);
