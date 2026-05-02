@@ -1,6 +1,6 @@
 import { db } from './database.js';
 import { games, scanLogs, releases } from './schema.js';
-import { desc, eq, and, inArray, notInArray } from 'drizzle-orm';
+import { desc, eq, and, inArray, lt } from 'drizzle-orm';
 import { qbitService } from './qbit.js';
 import { searchForGame, type SkipInfo } from './prowlarr.js';
 import { progressManager } from './progress.js';
@@ -15,19 +15,20 @@ type ScanOptions = {
 
 function pruneScanLogs(): void {
 	const retention = settings.SCAN_LOG_RETENTION;
-	const keptLogIds = db
+	const cutoffLog = db
 		.select({ id: scanLogs.id })
 		.from(scanLogs)
 		.orderBy(desc(scanLogs.id))
 		.limit(retention)
+		.offset(retention - 1)
 		.all()
-		.map((log) => log.id);
+		.at(0);
 
-	if (keptLogIds.length < retention) {
+	if (!cutoffLog) {
 		return;
 	}
 
-	const result = db.delete(scanLogs).where(notInArray(scanLogs.id, keptLogIds)).run();
+	const result = db.delete(scanLogs).where(lt(scanLogs.id, cutoffLog.id)).run();
 	if (result.changes > 0) {
 		logger.info(`Pruned ${result.changes} scan log(s), keeping latest ${retention}.`);
 	}
@@ -185,8 +186,11 @@ export async function runSearchUpdates(
             }),
             skipDetails: allSkipped.length ? JSON.stringify(allSkipped) : null
         }).run();
-        pruneScanLogs();
     } catch (e) { logError('Failed to save scan log', e); }
+
+    try {
+        pruneScanLogs();
+    } catch (e) { logError('Failed to prune scan logs', e); }
 
     if (fatalError && options.throwOnError) {
         throw fatalError;

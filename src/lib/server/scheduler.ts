@@ -47,6 +47,20 @@ function updateNextRunAt(intervalMs: number): void {
 	schedulerState.nextRunAt = new Date(Date.now() + intervalMs).toISOString();
 }
 
+function clearIntervalSchedule(): void {
+	if (schedulerState.intervalHandle) {
+		clearInterval(schedulerState.intervalHandle);
+		schedulerState.intervalHandle = null;
+	}
+}
+
+function clearStartupScanTimeout(): void {
+	if (schedulerState.startupTimeoutHandle) {
+		clearTimeout(schedulerState.startupTimeoutHandle);
+		schedulerState.startupTimeoutHandle = null;
+	}
+}
+
 async function runScheduledScan(trigger: 'startup' | 'interval'): Promise<void> {
 	if (schedulerState.currentScan) {
 		logger.warn(`[Scheduler] Skipping ${trigger} scan because another scan is already running.`);
@@ -99,13 +113,8 @@ export function startScheduler(): void {
 	const intervalMs = getIntervalMs();
 	const startupDelaySeconds = settings.STARTUP_SCAN_DELAY_SECONDS;
 
-	if (schedulerState.intervalHandle) {
-		clearInterval(schedulerState.intervalHandle);
-	}
-	if (schedulerState.startupTimeoutHandle) {
-		clearTimeout(schedulerState.startupTimeoutHandle);
-		schedulerState.startupTimeoutHandle = null;
-	}
+	clearIntervalSchedule();
+	clearStartupScanTimeout();
 
 	updateNextRunAt(intervalMs);
 	schedulerState.intervalHandle = setInterval(() => {
@@ -120,6 +129,10 @@ export function startScheduler(): void {
 
 export function rescheduleJob(minutes: number): void {
 	schedulerState.intervalMinutesOverride = minutes;
+	if (schedulerState.startupTimeoutHandle) {
+		logger.info('[Scheduler] Interval update will apply after the pending startup scan.');
+		return;
+	}
 	startScheduler();
 }
 
@@ -134,18 +147,22 @@ export function initApp(): void {
 
 	loadSettingsFromDb();
 
-	startScheduler();
 	schedulerState.initialized = true;
+
+	const runStartupThenStartScheduler = async (): Promise<void> => {
+		await runScheduledScan('startup');
+		startScheduler();
+	};
 
 	const startupDelayMs = getStartupScanDelayMs();
 	if (startupDelayMs === 0) {
-		void runScheduledScan('startup');
+		void runStartupThenStartScheduler();
 		return;
 	}
 
 	logger.info(`[Scheduler] Startup full scan scheduled in ${settings.STARTUP_SCAN_DELAY_SECONDS}s.`);
 	schedulerState.startupTimeoutHandle = setTimeout(() => {
 		schedulerState.startupTimeoutHandle = null;
-		void runScheduledScan('startup');
+		void runStartupThenStartScheduler();
 	}, startupDelayMs);
 }
