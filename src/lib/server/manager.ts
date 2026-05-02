@@ -1,16 +1,37 @@
 import { db } from './database.js';
 import { games, scanLogs, releases } from './schema.js';
-import { eq, and, inArray } from 'drizzle-orm';
+import { desc, eq, and, inArray, notInArray } from 'drizzle-orm';
 import { qbitService } from './qbit.js';
 import { searchForGame, type SkipInfo } from './prowlarr.js';
 import { progressManager } from './progress.js';
 import { logger, logError } from './logger.js';
 import { compareVersions } from './utils.js';
 import { tryAutoDownloadForGames } from './autoDownload.js';
+import { settings } from './config.js';
 
 type ScanOptions = {
 	throwOnError?: boolean;
 };
+
+function pruneScanLogs(): void {
+	const retention = settings.SCAN_LOG_RETENTION;
+	const keptLogIds = db
+		.select({ id: scanLogs.id })
+		.from(scanLogs)
+		.orderBy(desc(scanLogs.startedAt))
+		.limit(retention)
+		.all()
+		.map((log) => log.id);
+
+	if (keptLogIds.length < retention) {
+		return;
+	}
+
+	const result = db.delete(scanLogs).where(notInArray(scanLogs.id, keptLogIds)).run();
+	if (result.changes > 0) {
+		logger.info(`Pruned ${result.changes} scan log(s), keeping latest ${retention}.`);
+	}
+}
 
 export async function runSyncLibrary(
 	currentProgress?: { start: number; total: number },
@@ -164,6 +185,7 @@ export async function runSearchUpdates(
             }),
             skipDetails: allSkipped.length ? JSON.stringify(allSkipped) : null
         }).run();
+        pruneScanLogs();
     } catch (e) { logError('Failed to save scan log', e); }
 
     if (fatalError && options.throwOnError) {

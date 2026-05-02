@@ -7,6 +7,7 @@ import { APP_VERSION_LABEL } from '../version.js';
 
 type SchedulerState = {
 	intervalHandle: ReturnType<typeof setInterval> | null;
+	startupTimeoutHandle: ReturnType<typeof setTimeout> | null;
 	currentScan: Promise<void> | null;
 	initialized: boolean;
 	intervalMinutesOverride: number | null;
@@ -20,6 +21,7 @@ const globalScheduler = globalThis as typeof globalThis & {
 if (!globalScheduler.__repackarrSchedulerState) {
 	globalScheduler.__repackarrSchedulerState = {
 		intervalHandle: null,
+		startupTimeoutHandle: null,
 		currentScan: null,
 		initialized: false,
 		intervalMinutesOverride: null,
@@ -35,6 +37,10 @@ function getIntervalMinutes(): number {
 
 function getIntervalMs(): number {
 	return getIntervalMinutes() * 60 * 1000;
+}
+
+function getStartupScanDelayMs(): number {
+	return settings.STARTUP_SCAN_DELAY_SECONDS * 1000;
 }
 
 function updateNextRunAt(intervalMs: number): void {
@@ -91,6 +97,7 @@ export function loadSettingsFromDb(): void {
 export function startScheduler(): void {
 	const intervalMinutes = getIntervalMinutes();
 	const intervalMs = getIntervalMs();
+	const startupDelaySeconds = settings.STARTUP_SCAN_DELAY_SECONDS;
 
 	if (schedulerState.intervalHandle) {
 		clearInterval(schedulerState.intervalHandle);
@@ -103,7 +110,7 @@ export function startScheduler(): void {
 	}, intervalMs);
 
 	logger.info(
-		`Scheduler started (interval: ${intervalMinutes} min, startup scan: enabled, next run at: ${schedulerState.nextRunAt})`
+		`Scheduler started (interval: ${intervalMinutes} min, startup scan delay: ${startupDelaySeconds}s, next run at: ${schedulerState.nextRunAt})`
 	);
 }
 
@@ -125,5 +132,16 @@ export function initApp(): void {
 
 	startScheduler();
 	schedulerState.initialized = true;
-	void runScheduledScan('startup');
+
+	const startupDelayMs = getStartupScanDelayMs();
+	if (startupDelayMs === 0) {
+		void runScheduledScan('startup');
+		return;
+	}
+
+	logger.info(`[Scheduler] Startup full scan scheduled in ${settings.STARTUP_SCAN_DELAY_SECONDS}s.`);
+	schedulerState.startupTimeoutHandle = setTimeout(() => {
+		schedulerState.startupTimeoutHandle = null;
+		void runScheduledScan('startup');
+	}, startupDelayMs);
 }
