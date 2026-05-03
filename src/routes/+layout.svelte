@@ -17,7 +17,7 @@
 	const appVersion = APP_VERSION;
 	const changelog = [
 		{
-			version: 'Next',
+			version: '0.1.3',
 			notes: [
 				'Scan history now has configurable retention so older database scan logs are pruned automatically',
 				'Startup scans can wait for qBittorrent and Prowlarr before the first automatic scan runs',

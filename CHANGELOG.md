@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.3] - 2026-05-03
 
 ### Added
 - Added `SCAN_LOG_RETENTION` to keep scan history under control by pruning older database scan logs after each update scan.
