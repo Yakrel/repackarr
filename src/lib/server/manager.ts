@@ -7,20 +7,20 @@ import { progressManager } from './progress.js';
 import { logger, logError } from './logger.js';
 import { compareVersions } from './utils.js';
 import { tryAutoDownloadForGames } from './autoDownload.js';
-import { settings } from './config.js';
 
 type ScanOptions = {
 	throwOnError?: boolean;
 };
 
+const SCAN_LOG_RETENTION = 50;
+
 function pruneScanLogs(): void {
-	const retention = settings.SCAN_LOG_RETENTION;
 	const cutoffLog = db
 		.select({ id: scanLogs.id })
 		.from(scanLogs)
 		.orderBy(desc(scanLogs.id))
 		.limit(1)
-		.offset(retention - 1)
+		.offset(SCAN_LOG_RETENTION - 1)
 		.all()
 		.at(0);
 
@@ -30,7 +30,7 @@ function pruneScanLogs(): void {
 
 	const result = db.delete(scanLogs).where(lt(scanLogs.id, cutoffLog.id)).run();
 	if (result.changes > 0) {
-		logger.info(`Pruned ${result.changes} scan log(s), keeping latest ${retention}.`);
+		logger.info(`Pruned ${result.changes} scan log(s), keeping latest ${SCAN_LOG_RETENTION}.`);
 	}
 }
 

@@ -3,14 +3,14 @@
 ## [0.1.3] - 2026-05-03
 
 ### Added
-- Added `SCAN_LOG_RETENTION` to keep scan history under control by pruning older database scan logs after each update scan.
+- Added automatic pruning for scan history, keeping the latest 50 database scan logs.
 - Added `STARTUP_SCAN_DELAY_SECONDS` so the first automatic scan can wait for qBittorrent and Prowlarr to finish starting.
 - Added automatic cleanup for old `repackarr-YYYY-MM-DD.log` files so file logs do not linger beyond the 14-day retention window.
 
 ### Changed
 - Scan history retention now uses deterministic ID-based pruning and a single cutoff row for safer cleanup.
 - Scheduler intervals now start after the delayed startup scan, preventing interval scans from bypassing the startup delay.
-- Documentation now separates database scan-history retention from file-log retention.
+- Documentation now explains automatic database scan-history pruning and file-log cleanup.
 
 ### Fixed
 - Scan log save and prune failures now produce separate log messages.

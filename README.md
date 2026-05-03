@@ -113,7 +113,6 @@ All connection details are set via environment variables in your `.env` file:
 | `IGDB_CLIENT_SECRET` | (None) | *Recommended* — enables covers & autocomplete |
 | `CRON_INTERVAL_MINUTES` | `360` | How often to scan for updates (in minutes) |
 | `STARTUP_SCAN_DELAY_SECONDS` | `120` | Delay before the first startup scan, giving qBittorrent and Prowlarr time to become ready. Set to `0` to scan immediately. |
-| `SCAN_LOG_RETENTION` | `50` | Number of scan history rows to keep in the database. Older scan details are pruned after each scan. |
 | `AUTH_USERNAME` | (None) | Enable Basic Auth for the UI |
 | `AUTH_PASSWORD` | (None) | Enable Basic Auth for the UI |
 | `DATA_DIR` | `/app/data` | Where app data is stored. For the bundled Docker setup, set this to `./data` in your `.env`. |
