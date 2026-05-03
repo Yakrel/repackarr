@@ -17,6 +17,16 @@
 	const appVersion = APP_VERSION;
 	const changelog = [
 		{
+			version: 'Next',
+			notes: [
+				'Scan history now has configurable retention so older database scan logs are pruned automatically',
+				'Startup scans can wait for qBittorrent and Prowlarr before the first automatic scan runs',
+				'Old Repackarr file logs are cleaned on startup after the 14-day retention window',
+				'Scan log cleanup is safer and logs save/prune failures separately',
+				'Docker publishing now supports PR preview images for same-repository pull requests'
+			]
+		},
+		{
 			version: '0.1.2',
 			notes: [
 				'Auto-Download can now grab matching updates for you automatically',

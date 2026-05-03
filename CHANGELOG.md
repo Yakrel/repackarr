@@ -1,5 +1,23 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Added `SCAN_LOG_RETENTION` to keep scan history under control by pruning older database scan logs after each update scan.
+- Added `STARTUP_SCAN_DELAY_SECONDS` so the first automatic scan can wait for qBittorrent and Prowlarr to finish starting.
+- Added startup cleanup for old `repackarr-YYYY-MM-DD.log` files so file logs do not linger beyond the 14-day retention window.
+- Added Docker PR preview image publishing for same-repository pull requests.
+
+### Changed
+- Scan history retention now uses deterministic ID-based pruning and a single cutoff row for safer cleanup.
+- Scheduler intervals now start after the delayed startup scan, preventing interval scans from bypassing the startup delay.
+- Documentation now separates database scan-history retention from file-log retention.
+- Docker publishing now targets `main` and semver tags for regular image publishing.
+
+### Fixed
+- Scan log save and prune failures now produce separate log messages.
+- Old Repackarr log files that are not tracked by the rotate audit file are now cleaned on startup.
+
 ## [0.1.2] - 2026-03-08
 
 ### Added
