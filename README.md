@@ -113,11 +113,11 @@ All connection details are set via environment variables in your `.env` file:
 | `IGDB_CLIENT_SECRET` | (None) | *Recommended* — enables covers & autocomplete |
 | `CRON_INTERVAL_MINUTES` | `360` | How often to scan for updates (in minutes) |
 | `STARTUP_SCAN_DELAY_SECONDS` | `120` | Delay before the first startup scan, giving qBittorrent and Prowlarr time to become ready. Set to `0` to scan immediately. |
-| `SCAN_LOG_RETENTION` | `50` | Number of scan history rows to keep. Older scan details are pruned after each scan. |
+| `SCAN_LOG_RETENTION` | `50` | Number of scan history rows to keep in the database. Older scan details are pruned after each scan. |
 | `AUTH_USERNAME` | (None) | Enable Basic Auth for the UI |
 | `AUTH_PASSWORD` | (None) | Enable Basic Auth for the UI |
 | `DATA_DIR` | `/app/data` | Where app data is stored. For the bundled Docker setup, set this to `./data` in your `.env`. |
-| `LOG_DIR` | `logs` | Where app logs are written. For the bundled Docker setup, set this to `./logs` in your `.env`. |
+| `LOG_DIR` | `logs` | Where app file logs are written. Repackarr writes `repackarr-YYYY-MM-DD.log` files and cleans old Repackarr log files after 14 days. For the bundled Docker setup, set this to `./logs` in your `.env`. |
 
 The following controls are managed from the UI:
 

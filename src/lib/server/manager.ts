@@ -19,7 +19,7 @@ function pruneScanLogs(): void {
 		.select({ id: scanLogs.id })
 		.from(scanLogs)
 		.orderBy(desc(scanLogs.id))
-		.limit(retention)
+		.limit(1)
 		.offset(retention - 1)
 		.all()
 		.at(0);

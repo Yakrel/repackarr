@@ -2,7 +2,7 @@ import { settings, updateSettings } from './config.js';
 import { db, runMigrations } from './database.js';
 import { appSettings } from './schema.js';
 import { runScanCycle } from './manager.js';
-import { logger, logError } from './logger.js';
+import { cleanupOldLogFiles, logger, logError } from './logger.js';
 import { APP_VERSION_LABEL } from '../version.js';
 
 type SchedulerState = {
@@ -142,6 +142,7 @@ export function initApp(): void {
 	}
 
 	logger.info(`Starting Repackarr ${APP_VERSION_LABEL}`);
+	void cleanupOldLogFiles();
 
 	runMigrations();
 
