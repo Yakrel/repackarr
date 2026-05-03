@@ -19,9 +19,9 @@
 		{
 			version: '0.1.3',
 			notes: [
-				'Older scan history is pruned automatically so database logs stay under control',
+				'Automatic log retention cleanup keeps the latest 50 scan history records and removes file logs older than 14 days',
 				'Startup scans can wait for qBittorrent and Prowlarr before the first automatic scan runs',
-				'Old Repackarr file logs are cleaned automatically after the 14-day retention window'
+				'Scan log cleanup is safer and avoids deleting newly created scan history'
 			]
 		},
 		{
