@@ -108,7 +108,12 @@ export const actions: Actions = {
 		const allGames = db.select().from(games).all();
 		const duplicate = allGames.find((g) => normalizeTitle(g.title) === normalizedTitle);
 		if (duplicate) {
-			return fail(400, { error: `A similar game already exists: '${duplicate.title}'` });
+			return {
+				success: true,
+				alreadyExists: true,
+				gameId: duplicate.id,
+				message: `'${duplicate.title}' is already in your library.`
+			};
 		}
 
 		const versionDate = new Date(0).toISOString();

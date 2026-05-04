@@ -320,6 +320,13 @@
 			const result = await resp.json();
 
 			if (result.type === 'success') {
+				if (result.data?.alreadyExists) {
+					toastStore.info(result.data?.message || 'This game is already in your library.', 'Add Game');
+					closeAddModal();
+					addingGame = false;
+					return;
+				}
+
 				const foundCount = result.data?.foundReleases || 0;
 				const redirectToDashboard = result.data?.redirectToDashboard;
 				const message = result.data?.message;
