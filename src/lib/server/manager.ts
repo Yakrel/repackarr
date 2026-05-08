@@ -92,7 +92,9 @@ export async function runSearchUpdates(
             const activeTitles = new Set(chunk.map((game) => game.title));
             const formatActiveSearches = () => {
                 const titles = Array.from(activeTitles);
-                return titles.length > 0 ? `Searching: ${titles.join(', ')}` : 'Finalizing scan...';
+                if (titles.length === 0) return 'Finalizing scan...';
+                if (titles.length === 1) return `Searching: ${titles[0]}`;
+                return `Searching ${titles.length} games: ${titles[0]} +${titles.length - 1} more`;
             };
 
             progressManager.update(startOffset + processedCount, formatActiveSearches());
