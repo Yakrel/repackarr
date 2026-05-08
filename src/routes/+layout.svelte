@@ -56,17 +56,25 @@
 	let showChangelog = $state(false);
 	
 	// Progress tracking
-	let scanProgress = $state({
-		isScanning: false,
-		phase: '',
-		currentStep: 0,
-		totalSteps: 0,
-		currentItem: '',
-		percent: 0,
-		startedAt: null as string | null
-	});
+	function idleScanProgress() {
+		return {
+			isScanning: false,
+			phase: '',
+			currentStep: 0,
+			totalSteps: 0,
+			currentItem: '',
+			percent: 0,
+			startedAt: null as string | null
+		};
+	}
+
+	let scanProgress = $state(idleScanProgress());
 	let eventSource: EventSource | null = null;
 	let hasSeenActiveScan = false;
+
+	function resetScanProgress() {
+		scanProgress = idleScanProgress();
+	}
 
 	function getIcon(icon: string) {
 		const icons: Record<string, string> = {
@@ -84,6 +92,7 @@
 		}
 
 		hasSeenActiveScan = false;
+		resetScanProgress();
 	}
 
 	function startProgressTracking() {

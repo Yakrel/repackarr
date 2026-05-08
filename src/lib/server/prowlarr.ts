@@ -54,6 +54,7 @@ class IndexerCache {
 }
 
 const indexerCache = new IndexerCache();
+const PROWLARR_SEARCH_TIMEOUT_MS = 120_000;
 
 export async function refreshIndexerCache(): Promise<void> {
 	await indexerCache.getIds();
@@ -82,6 +83,7 @@ export async function searchForGame(gameId: number): Promise<SearchResult> {
     const stats: SearchResult = { gameId, totalFound: 0, added: 0, skipped: [], error: null };
     const game = db.select().from(games).where(eq(games.id, gameId)).get();
     if (!game) return { ...stats, error: 'Game not found' };
+    const startedAt = Date.now();
 
     try {
         const indexerIds = await indexerCache.getIds();
@@ -98,16 +100,25 @@ export async function searchForGame(gameId: number): Promise<SearchResult> {
         }
         logger.info(`[Prowlarr] Searching for '${game.title}' | query="${game.searchQuery}" | indexers=[${indexerIds.join(',')}]`);
 
-        const resp = await fetch(`${settings.PROWLARR_URL}/api/v1/search?${params}`, {
-            headers: { 'X-Api-Key': settings.PROWLARR_API_KEY }
-        });
-        if (!resp.ok) {
-            logger.error(`[Prowlarr] Search request failed for '${game.title}': HTTP ${resp.status}`);
-            return { ...stats, error: `HTTP ${resp.status}` };
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), PROWLARR_SEARCH_TIMEOUT_MS);
+        let results: ProwlarrSearchResult[];
+        try {
+            const resp = await fetch(`${settings.PROWLARR_URL}/api/v1/search?${params}`, {
+                headers: { 'X-Api-Key': settings.PROWLARR_API_KEY },
+                signal: controller.signal
+            });
+            if (!resp.ok) {
+                logger.error(`[Prowlarr] Search request failed for '${game.title}': HTTP ${resp.status}`);
+                return { ...stats, error: `HTTP ${resp.status}` };
+            }
+            results = (await resp.json()) as ProwlarrSearchResult[];
+        } finally {
+            clearTimeout(timeout);
         }
 
-        const results = (await resp.json()) as ProwlarrSearchResult[];
-        logger.debug(`[Prowlarr] '${game.title}': ${results.length} result(s) received from Prowlarr`);
+        const durationSeconds = ((Date.now() - startedAt) / 1000).toFixed(3);
+        logger.debug(`[Prowlarr] '${game.title}': ${results.length} result(s) received from Prowlarr in ${durationSeconds}s`);
         stats.totalFound = results.length;
 
         const ignoredKeywords = getIgnoredKeywordsList();
@@ -133,7 +144,16 @@ export async function searchForGame(gameId: number): Promise<SearchResult> {
         }
 
         db.update(games).set({ lastScannedAt: new Date().toISOString() }).where(eq(games.id, gameId)).run();
-    } catch (e) { stats.error = String(e); }
+    } catch (e) {
+        const durationSeconds = ((Date.now() - startedAt) / 1000).toFixed(3);
+        if (e instanceof Error && e.name === 'AbortError') {
+            logger.warn(`[Prowlarr] Search timed out for '${game.title}' after ${durationSeconds}s`);
+            stats.error = `Prowlarr search timed out after ${Math.round(PROWLARR_SEARCH_TIMEOUT_MS / 1000)}s`;
+        } else {
+            logger.warn(`[Prowlarr] Search failed for '${game.title}' after ${durationSeconds}s: ${String(e)}`);
+            stats.error = String(e);
+        }
+    }
     return stats;
 }
 

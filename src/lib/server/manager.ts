@@ -89,12 +89,24 @@ export async function runSearchUpdates(
         const startOffset = currentProgress ? currentProgress.start : 0;
 
         for (const chunk of chunks) {
+            const activeTitles = new Set(chunk.map((game) => game.title));
+            const formatActiveSearches = () => {
+                const titles = Array.from(activeTitles);
+                return titles.length > 0 ? `Searching: ${titles.join(', ')}` : 'Finalizing scan...';
+            };
+
+            progressManager.update(startOffset + processedCount, formatActiveSearches());
+
             await Promise.all(chunk.map(async (game) => {
                 try {
                     const res = await searchForGame(game.id);
                     totalFound += res.totalFound;
                     totalAdded += res.added;
-                    if (res.error) scanDetails.push(`${game.title}: ${res.error}`);
+                    if (res.error === 'Game not found') {
+                        logger.debug(`[Scan] '${game.title}' was deleted during scan; skipping.`);
+                    } else if (res.error) {
+                        scanDetails.push(`${game.title}: ${res.error}`);
+                    }
                     if (res.skipped.length > 0) {
                         allSkipped.push({ game: game.title, game_id: game.id, items: res.skipped });
                     }
@@ -103,10 +115,13 @@ export async function runSearchUpdates(
                     scanDetails.push(`${game.title}: Exception ${String(error)}`);
                 } finally {
                     processedCount++;
-                    progressManager.update(startOffset + processedCount, `Searched: ${game.title}`);
+                    activeTitles.delete(game.title);
+                    progressManager.update(startOffset + processedCount, formatActiveSearches());
                 }
             }));
         }
+
+        progressManager.update(startOffset + processedCount, 'Finalizing scan...');
 
         // --- STALE RELEASES CLEANUP ---
         // Final check to remove any releases that are now same/older than owned version
