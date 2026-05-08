@@ -1081,15 +1081,18 @@
 											title="Open Steam store page"
 										>
 											<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-												<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
+												<path d="M11.98 0C5.68 0 .51 4.86.02 11.04l6.43 2.66a3.4 3.4 0 0 1 1.91-.59h.19l2.86-4.14v-.06a4.53 4.53 0 1 1 4.42 4.53l-4.07 2.91v.16a3.39 3.39 0 0 1-6.72.66L.44 15.27A12 12 0 1 0 11.98 0ZM7.54 18.21l-1.47-.61c.26.54.71 1 1.31 1.25a2.51 2.51 0 0 0 3.33-1.38 2.5 2.5 0 0 0-1.37-3.33 2.48 2.48 0 0 0-1.88-.03l1.53.63a1.88 1.88 0 1 1-1.45 3.47Zm8.4-6.29a3.02 3.02 0 1 0 0-6.03 3.02 3.02 0 0 0 0 6.03Zm0-.76a2.26 2.26 0 1 1 .01-4.52 2.26 2.26 0 0 1-.01 4.52Z" />
 											</svg>
 											Steam
 										</a>
 									{:else}
 										<span
-											class="inline-flex w-[7.5rem] justify-center items-center px-2 py-1 rounded-lg border border-slate-700/50 bg-slate-900/30 text-slate-600 text-xs font-medium"
+											class="inline-flex w-[7.5rem] justify-center items-center gap-1 px-2 py-1 rounded-lg border border-slate-700/50 bg-slate-900/30 text-slate-600 text-xs font-medium"
 											title="No Steam App ID available"
 										>
+											<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+												<path d="M11.98 0C5.68 0 .51 4.86.02 11.04l6.43 2.66a3.4 3.4 0 0 1 1.91-.59h.19l2.86-4.14v-.06a4.53 4.53 0 1 1 4.42 4.53l-4.07 2.91v.16a3.39 3.39 0 0 1-6.72.66L.44 15.27A12 12 0 1 0 11.98 0ZM7.54 18.21l-1.47-.61c.26.54.71 1 1.31 1.25a2.51 2.51 0 0 0 3.33-1.38 2.5 2.5 0 0 0-1.37-3.33 2.48 2.48 0 0 0-1.88-.03l1.53.63a1.88 1.88 0 1 1-1.45 3.47Zm8.4-6.29a3.02 3.02 0 1 0 0-6.03 3.02 3.02 0 0 0 0 6.03Zm0-.76a2.26 2.26 0 1 1 .01-4.52 2.26 2.26 0 0 1-.01 4.52Z" />
+											</svg>
 											Steam
 										</span>
 									{/if}
