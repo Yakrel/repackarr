@@ -22,7 +22,8 @@
 				'Automatic log retention cleanup keeps the latest 50 scan history records and removes file logs older than 14 days',
 				'Startup scans can wait for qBittorrent and Prowlarr before the first automatic scan runs',
 				'Scan log cleanup is safer and avoids deleting newly created scan history',
-				'Adding a game you already track now shows an informational message instead of a failure'
+				'Adding a game you already track now shows an informational message instead of a failure',
+				'Full Scan progress now shows active searches more accurately and clears stale progress state'
 			]
 		},
 		{
