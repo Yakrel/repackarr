@@ -25,5 +25,6 @@ This project uses Drizzle Kit for database migrations.
   pnpm db:generate
   git add drizzle/ src/lib/server/schema.ts
   ```
+- The current public baseline is squashed into a single initial migration. Until the first public release, old local-only migration history does not need to be preserved.
 - Never modify SQL files in `drizzle/` manually.
 - Automatic migration runs on app startup.

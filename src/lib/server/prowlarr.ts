@@ -1,6 +1,6 @@
 import { settings, getAllowedIndexersList, getIgnoredKeywordsList } from './config.js';
 import { db } from './database.js';
-import { games, releases, ignoredReleases } from './schema.js';
+import { games, releases, ignoredReleases, appSettings } from './schema.js';
 import { eq } from 'drizzle-orm';
 import { logger, logError } from './logger.js';
 import {
@@ -142,6 +142,30 @@ export async function searchForGame(gameId: number): Promise<SearchResult> {
                 stats.skipped.push(processed.skipInfo);
             }
         }
+
+        const snapshotUpdatedAt = new Date().toISOString();
+        db.insert(appSettings)
+            .values({
+                key: `skipped_releases:${game.id}`,
+                value: JSON.stringify({
+                    gameId: game.id,
+                    scannedAt: snapshotUpdatedAt,
+                    items: stats.skipped
+                }),
+                updatedAt: snapshotUpdatedAt
+            })
+            .onConflictDoUpdate({
+                target: appSettings.key,
+                set: {
+                    value: JSON.stringify({
+                        gameId: game.id,
+                        scannedAt: snapshotUpdatedAt,
+                        items: stats.skipped
+                    }),
+                    updatedAt: snapshotUpdatedAt
+                }
+            })
+            .run();
 
         db.update(games).set({ lastScannedAt: new Date().toISOString() }).where(eq(games.id, gameId)).run();
     } catch (e) {

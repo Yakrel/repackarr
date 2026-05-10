@@ -13,7 +13,6 @@ export interface ScanLog {
 	updatesFound: number;
 	status: 'success' | 'partial_success' | 'failed';
 	details?: string;
-	skipDetails?: string;
 }
 
 /**
@@ -25,11 +24,6 @@ export interface ScanLogDetails {
 		total_results_found?: number;
 		errors?: string[];
 	};
-	skipSummary?: Array<{
-		game: string;
-		game_id: number;
-		items: SkipInfo[];
-	}>;
 }
 
 /**

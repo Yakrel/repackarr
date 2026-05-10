@@ -69,8 +69,7 @@ export const scanLogs = sqliteTable('scan_log', {
 	gamesProcessed: integer('games_processed').notNull().default(0),
 	updatesFound: integer('updates_found').notNull().default(0),
 	status: text('status').notNull().default('success'),
-	details: text('details'),
-	skipDetails: text('skip_details')
+	details: text('details')
 });
 
 export const ignoredReleases = sqliteTable('ignored_release', {

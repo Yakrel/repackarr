@@ -1,8 +1,8 @@
 import { db } from './database.js';
 import { games, scanLogs, releases } from './schema.js';
-import { desc, eq, and, inArray, lt } from 'drizzle-orm';
+import { desc, eq, inArray, lt } from 'drizzle-orm';
 import { qbitService } from './qbit.js';
-import { searchForGame, type SkipInfo } from './prowlarr.js';
+import { searchForGame } from './prowlarr.js';
 import { progressManager } from './progress.js';
 import { logger, logError } from './logger.js';
 import { compareVersions } from './utils.js';
@@ -71,7 +71,6 @@ export async function runSearchUpdates(
     logger.info('Starting Prowlarr update search...');
     let scanned = 0, totalFound = 0, totalAdded = 0;
     const scanDetails: string[] = [];
-    const allSkipped: Array<{ game: string; game_id: number; items: SkipInfo[] }> = [];
     let fatalError: unknown = null;
 
     try {
@@ -109,9 +108,6 @@ export async function runSearchUpdates(
                     } else if (res.error) {
                         scanDetails.push(`${game.title}: ${res.error}`);
                     }
-                    if (res.skipped.length > 0) {
-                        allSkipped.push({ game: game.title, game_id: game.id, items: res.skipped });
-                    }
                 } catch (error) {
                     logError(`Exception while searching for ${game.title}`, error);
                     scanDetails.push(`${game.title}: Exception ${String(error)}`);
@@ -137,15 +133,6 @@ export async function runSearchUpdates(
                     const cmp = compareVersions(game.currentVersion, rel.parsedVersion);
                     if (cmp === 0 || cmp === 1) {
                         staleIds.push(rel.id);
-                        const skipItem: SkipInfo = {
-                            gameId: game.id, gameTitle: game.title, title: rel.rawTitle,
-                            date: rel.uploadDate, reason: `Owned version ${game.currentVersion} is same/newer`,
-                            category: 'cleanup', indexer: rel.indexer, isNewerDate: false,
-                            magnetUrl: rel.magnetUrl, infoUrl: rel.infoUrl, size: rel.size || '?'
-                        };
-                        const existing = allSkipped.find(s => s.game_id === game.id);
-                        if (existing) existing.items.push(skipItem);
-                        else allSkipped.push({ game: game.title, game_id: game.id, items: [skipItem] });
                     }
                 }
             }
@@ -200,8 +187,7 @@ export async function runSearchUpdates(
                 total_results_found: totalFound,
                 errors: scanDetails.slice(0, 10),
                 fatal_error: fatalError instanceof Error ? fatalError.message : fatalError ? String(fatalError) : null
-            }),
-            skipDetails: allSkipped.length ? JSON.stringify(allSkipped) : null
+            })
         }).run();
     } catch (e) { logError('Failed to save scan log', e); }
 

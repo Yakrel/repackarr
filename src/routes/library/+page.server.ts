@@ -1,5 +1,5 @@
 import { db } from '$lib/server/database.js';
-import { games, releases } from '$lib/server/schema.js';
+import { games, releases, appSettings } from '$lib/server/schema.js';
 import { and, eq, sql } from 'drizzle-orm';
 import type { PageServerLoad, Actions } from './$types.js';
 import { fail } from '@sveltejs/kit';
@@ -291,6 +291,7 @@ export const actions: Actions = {
 				}
 			}
 
+			db.delete(appSettings).where(eq(appSettings.key, `skipped_releases:${id}`)).run();
 			db.delete(games).where(eq(games.id, id)).run();
 			logger.info(`Deleted game id=${id} from library`);
 			return { success: true };

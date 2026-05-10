@@ -152,6 +152,8 @@ The following settings are managed from the web UI:
 - Per-game AutoDL overrides
 - Per-game search queries and filters
 
+Scan history is stored as lightweight summaries. Per-game skipped release details are kept as the latest scan snapshot so the Library page can explain why releases were filtered without growing historical scan logs.
+
 ## Notes
 
 - Repackarr is tuned for RuTracker.org and NoNaMe Club. Other trackers may need manual search query adjustments and may not parse versions reliably.
