@@ -1,7 +1,7 @@
 # Build stage
 FROM node:22-slim AS builder
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 
 # Install build dependencies for better-sqlite3
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Install dependencies
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml svelte.config.js vite.config.ts tsconfig.json .npmrc ./
 RUN pnpm install --frozen-lockfile
 
 # Copy source and build
