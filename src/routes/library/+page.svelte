@@ -4,8 +4,21 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import { toastStore } from '$lib/stores/toast.js';
 	import { goto, invalidateAll } from '$app/navigation';
+	import { deserialize } from '$app/forms';
 
 	let { data }: { data: PageData } = $props();
+
+	type GameSuggestion = { name: string; display: string; igdbId?: number; year?: number; steamAppId?: number };
+	type AddGameSuccess = {
+		alreadyExists?: boolean;
+		gameId?: number;
+		message?: string;
+		foundReleases?: number;
+		redirectToDashboard?: boolean;
+		autoDownloaded?: boolean;
+		autoDownloadVersion?: string;
+	};
+	type AddGameFailure = { error?: string };
 
 	// Modal states
 	let confirmModal = $state<{
@@ -35,21 +48,22 @@
 	// Add game form state
 	let gameTitle = $state('');
 	let searchQuery = $state('');
+	let selectedIgdbId = $state<number | null>(null);
 	let mode = $state<'download_now' | 'track_only'>('download_now');
 	let platformFilter = $state('Windows');
-	let suggestions = $state<Array<{ name: string; display: string }>>([]);
+	let suggestions = $state<GameSuggestion[]>([]);
 	let showSuggestions = $state(false);
 	let autocompleteTimeout: ReturnType<typeof setTimeout> | null = null;
 	let abortController: AbortController | null = null;
-	const localCache = new Map<string, Array<{ name: string; display: string }>>();
+	const localCache = new Map<string, GameSuggestion[]>();
 	let isSearching = $state(false);
 
 	// Edit game autocomplete state
-	let editSuggestions = $state<Array<{ name: string; display: string }>>([]);
+	let editSuggestions = $state<GameSuggestion[]>([]);
 	let showEditSuggestions = $state(false);
 	let editAutocompleteTimeout: ReturnType<typeof setTimeout> | null = null;
 	let editAbortController: AbortController | null = null;
-	const editLocalCache = new Map<string, Array<{ name: string; display: string }>>();
+	const editLocalCache = new Map<string, GameSuggestion[]>();
 	let isEditingSearching = $state(false);
 
 	// qBittorrent status polling
@@ -230,6 +244,7 @@
 		addingGame = false;
 		gameTitle = '';
 		searchQuery = '';
+		selectedIgdbId = null;
 		platformFilter = 'Windows';
 		suggestions = [];
 		showSuggestions = false;
@@ -317,9 +332,16 @@
 				body: formData
 			});
 
-			const result = await resp.json();
+			const result = deserialize<AddGameSuccess, AddGameFailure>(await resp.text());
 
 			if (result.type === 'success') {
+				if (result.data?.alreadyExists) {
+					toastStore.info(result.data?.message || 'This game is already in your library.', 'Add Game');
+					closeAddModal();
+					addingGame = false;
+					return;
+				}
+
 				const foundCount = result.data?.foundReleases || 0;
 				const redirectToDashboard = result.data?.redirectToDashboard;
 				const message = result.data?.message;
@@ -420,6 +442,7 @@
 		if (gameTitle) {
 			searchQuery = gameTitle.toLowerCase();
 		}
+		selectedIgdbId = null;
 
 		if (autocompleteTimeout) clearTimeout(autocompleteTimeout);
 
@@ -474,12 +497,13 @@
 			} finally {
 				isSearching = false;
 			}
-		}, 200);
+		}, 300);
 	}
 
-	function selectSuggestion(suggestion: { name: string; display: string }) {
+	function selectSuggestion(suggestion: GameSuggestion) {
 		gameTitle = suggestion.name;
 		searchQuery = suggestion.name.toLowerCase();
+		selectedIgdbId = suggestion.igdbId ?? null;
 		suggestions = [];
 		showSuggestions = false;
 	}
@@ -538,10 +562,10 @@
 			} finally {
 				isEditingSearching = false;
 			}
-		}, 200);
+		}, 300);
 	}
 
-	function selectEditSuggestion(suggestion: { name: string; display: string }) {
+	function selectEditSuggestion(suggestion: GameSuggestion) {
 		const titleInput = document.getElementById('edit_title') as HTMLInputElement;
 		const queryInput = document.getElementById('edit_query') as HTMLInputElement;
 		if (titleInput) titleInput.value = suggestion.name;
@@ -1278,6 +1302,7 @@
 
 				<!-- Search Query -->
 				<div>
+					<input type="hidden" name="igdb_id" value={selectedIgdbId ?? ''} />
 					<label for="search_query" class="block text-sm font-medium text-slate-300 mb-2">
 						Search Query
 					</label>

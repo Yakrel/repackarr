@@ -2,11 +2,12 @@ import { settings, updateSettings } from './config.js';
 import { db, runMigrations } from './database.js';
 import { appSettings } from './schema.js';
 import { runScanCycle } from './manager.js';
-import { logger, logError } from './logger.js';
+import { cleanupOldLogFiles, logger, logError } from './logger.js';
 import { APP_VERSION_LABEL } from '../version.js';
 
 type SchedulerState = {
 	intervalHandle: ReturnType<typeof setInterval> | null;
+	startupTimeoutHandle: ReturnType<typeof setTimeout> | null;
 	currentScan: Promise<void> | null;
 	initialized: boolean;
 	intervalMinutesOverride: number | null;
@@ -20,6 +21,7 @@ const globalScheduler = globalThis as typeof globalThis & {
 if (!globalScheduler.__repackarrSchedulerState) {
 	globalScheduler.__repackarrSchedulerState = {
 		intervalHandle: null,
+		startupTimeoutHandle: null,
 		currentScan: null,
 		initialized: false,
 		intervalMinutesOverride: null,
@@ -37,8 +39,26 @@ function getIntervalMs(): number {
 	return getIntervalMinutes() * 60 * 1000;
 }
 
+function getStartupScanDelayMs(): number {
+	return settings.STARTUP_SCAN_DELAY_SECONDS * 1000;
+}
+
 function updateNextRunAt(intervalMs: number): void {
 	schedulerState.nextRunAt = new Date(Date.now() + intervalMs).toISOString();
+}
+
+function clearIntervalSchedule(): void {
+	if (schedulerState.intervalHandle) {
+		clearInterval(schedulerState.intervalHandle);
+		schedulerState.intervalHandle = null;
+	}
+}
+
+function clearStartupScanTimeout(): void {
+	if (schedulerState.startupTimeoutHandle) {
+		clearTimeout(schedulerState.startupTimeoutHandle);
+		schedulerState.startupTimeoutHandle = null;
+	}
 }
 
 async function runScheduledScan(trigger: 'startup' | 'interval'): Promise<void> {
@@ -91,10 +111,10 @@ export function loadSettingsFromDb(): void {
 export function startScheduler(): void {
 	const intervalMinutes = getIntervalMinutes();
 	const intervalMs = getIntervalMs();
+	const startupDelaySeconds = settings.STARTUP_SCAN_DELAY_SECONDS;
 
-	if (schedulerState.intervalHandle) {
-		clearInterval(schedulerState.intervalHandle);
-	}
+	clearIntervalSchedule();
+	clearStartupScanTimeout();
 
 	updateNextRunAt(intervalMs);
 	schedulerState.intervalHandle = setInterval(() => {
@@ -103,12 +123,16 @@ export function startScheduler(): void {
 	}, intervalMs);
 
 	logger.info(
-		`Scheduler started (interval: ${intervalMinutes} min, startup scan: enabled, next run at: ${schedulerState.nextRunAt})`
+		`Scheduler started (interval: ${intervalMinutes} min, startup scan delay: ${startupDelaySeconds}s, next run at: ${schedulerState.nextRunAt})`
 	);
 }
 
 export function rescheduleJob(minutes: number): void {
 	schedulerState.intervalMinutesOverride = minutes;
+	if (schedulerState.startupTimeoutHandle) {
+		logger.info('[Scheduler] Interval update will apply after the pending startup scan.');
+		return;
+	}
 	startScheduler();
 }
 
@@ -118,12 +142,28 @@ export function initApp(): void {
 	}
 
 	logger.info(`Starting Repackarr ${APP_VERSION_LABEL}`);
+	void cleanupOldLogFiles();
 
 	runMigrations();
 
 	loadSettingsFromDb();
 
-	startScheduler();
 	schedulerState.initialized = true;
-	void runScheduledScan('startup');
+
+	const runStartupThenStartScheduler = async (): Promise<void> => {
+		await runScheduledScan('startup');
+		startScheduler();
+	};
+
+	const startupDelayMs = getStartupScanDelayMs();
+	if (startupDelayMs === 0) {
+		void runStartupThenStartScheduler();
+		return;
+	}
+
+	logger.info(`[Scheduler] Startup full scan scheduled in ${settings.STARTUP_SCAN_DELAY_SECONDS}s.`);
+	schedulerState.startupTimeoutHandle = setTimeout(() => {
+		schedulerState.startupTimeoutHandle = null;
+		void runStartupThenStartScheduler();
+	}, startupDelayMs);
 }

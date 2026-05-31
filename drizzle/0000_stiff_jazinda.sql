@@ -1,7 +1,7 @@
 CREATE TABLE `app_setting` (
 	`key` text PRIMARY KEY NOT NULL,
 	`value` text NOT NULL,
-	`updated_at` text DEFAULT (CURRENT_TIMESTAMP) NOT NULL
+	`updated_at` text NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `game` (
@@ -13,7 +13,7 @@ CREATE TABLE `game` (
 	`status` text DEFAULT 'monitored' NOT NULL,
 	`platform_filter` text DEFAULT 'Windows' NOT NULL,
 	`exclude_keywords` text,
-	`is_manual` integer DEFAULT 0 NOT NULL,
+	`is_manual` integer DEFAULT false NOT NULL,
 	`qbit_synced_at` text,
 	`igdb_id` integer,
 	`cover_url` text,
@@ -21,6 +21,7 @@ CREATE TABLE `game` (
 	`source_url` text,
 	`raw_name` text,
 	`info_hash` text,
+	`auto_download_enabled` integer,
 	`created_at` text NOT NULL,
 	`last_scanned_at` text
 );
@@ -35,6 +36,19 @@ CREATE TABLE `ignored_release` (
 );
 --> statement-breakpoint
 CREATE INDEX `idx_ignored_release_game_id` ON `ignored_release` (`game_id`);--> statement-breakpoint
+CREATE TABLE `notification` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`type` text NOT NULL,
+	`game_id` integer,
+	`game_title` text NOT NULL,
+	`message` text NOT NULL,
+	`is_read` integer DEFAULT false NOT NULL,
+	`created_at` text NOT NULL,
+	FOREIGN KEY (`game_id`) REFERENCES `game`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `idx_notification_is_read` ON `notification` (`is_read`);--> statement-breakpoint
+CREATE INDEX `idx_notification_created_at` ON `notification` (`created_at`);--> statement-breakpoint
 CREATE TABLE `release` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`game_id` integer NOT NULL,
@@ -48,7 +62,7 @@ CREATE TABLE `release` (
 	`seeders` integer,
 	`leechers` integer,
 	`grabs` integer,
-	`is_ignored` integer DEFAULT 0 NOT NULL,
+	`is_ignored` integer DEFAULT false NOT NULL,
 	`found_at` text NOT NULL,
 	FOREIGN KEY (`game_id`) REFERENCES `game`(`id`) ON UPDATE no action ON DELETE cascade
 );
@@ -62,6 +76,5 @@ CREATE TABLE `scan_log` (
 	`games_processed` integer DEFAULT 0 NOT NULL,
 	`updates_found` integer DEFAULT 0 NOT NULL,
 	`status` text DEFAULT 'success' NOT NULL,
-	`details` text,
-	`skip_details` text
+	`details` text
 );

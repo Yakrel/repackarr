@@ -23,8 +23,8 @@ Repackarr is an automated manager for game repacks, designed to track updates an
 ### Data Model (`src/lib/server/schema.ts`)
 *   **`games`**: Tracks owned games, their current versions, and IGDB metadata.
 *   **`releases`**: Stores discovered updates found via Prowlarr.
-*   **`appSettings`**: Key-value store for UI-managed configuration (e.g., ignored keywords).
-*   **`scanLogs`**: History of library syncs and update searches.
+*   **`appSettings`**: Key-value store for UI-managed configuration and latest per-game skipped release snapshots.
+*   **`scanLogs`**: Lightweight history of library syncs and update searches.
 
 ## Development Workflow
 
@@ -49,6 +49,7 @@ cp .env.example .env # Configure your qBit/Prowlarr details
 Repackarr uses Drizzle Kit for schema management.
 *   **Push Schema:** `pnpm db:push` (Directly updates the local SQLite database).
 *   **Generate Migrations:** `pnpm db:generate` (Required for schema changes).
+*   **Baseline:** Pre-release migration history is squashed into a single initial migration.
 *   **Studio:** `pnpx drizzle-kit studio` (Visual DB explorer).
 
 ### Running the App

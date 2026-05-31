@@ -1,15 +1,16 @@
 import { db } from '$lib/server/database.js';
-import { games, releases } from '$lib/server/schema.js';
+import { games, releases, appSettings } from '$lib/server/schema.js';
 import { and, eq, sql } from 'drizzle-orm';
 import type { PageServerLoad, Actions } from './$types.js';
 import { fail } from '@sveltejs/kit';
-import { normalizeTitle, cleanGameTitle, toTitleCaseWords, compareVersions } from '$lib/server/utils.js';
+import { cleanGameTitle, toTitleCaseWords, compareVersions } from '$lib/server/utils.js';
 import { isIgdbEnabled } from '$lib/server/config.js';
-import { getGameMetadata } from '$lib/server/igdb.js';
+import { getGameMetadata, getGameMetadataById } from '$lib/server/igdb.js';
 import { searchForGame } from '$lib/server/prowlarr.js';
 import { logger } from '$lib/server/logger.js';
 import { qbitService } from '$lib/server/qbit.js';
 import { tryAutoDownloadForGame } from '$lib/server/autoDownload.js';
+import { findDuplicateGame } from '$lib/server/gameDuplicates.js';
 
 const METADATA_BACKFILL_INTERVAL_MS = 30 * 60 * 1000;
 let metadataBackfillRunning = false;
@@ -96,6 +97,8 @@ export const actions: Actions = {
 		const searchNow = form.get('search_now') === 'on';
 		const platformFilter = (form.get('platform_filter') as string) || 'Windows';
 		const excludeKeywords = (form.get('exclude_keywords') as string)?.trim() || null;
+		const igdbIdRaw = (form.get('igdb_id') as string)?.trim();
+		const selectedIgdbId = igdbIdRaw ? parseInt(igdbIdRaw, 10) : null;
 
 		if (!titleRaw) return fail(400, { error: 'Title is required' });
 		if (!searchQueryRaw) return fail(400, { error: 'Search query is required' });
@@ -103,30 +106,40 @@ export const actions: Actions = {
 		const title = toTitleCaseWords(titleRaw);
 		const searchQuery = toTitleCaseWords(searchQueryRaw);
 
+		let metadata = null;
+		if (isIgdbEnabled()) {
+			try {
+				metadata =
+					selectedIgdbId && !isNaN(selectedIgdbId)
+						? await getGameMetadataById(selectedIgdbId)
+						: await getGameMetadata(cleanGameTitle(title));
+			} catch (error) {
+				logger.warn(`Failed to fetch IGDB metadata for ${title}: ${error}`);
+			}
+		}
+
 		// Check duplicates
-		const normalizedTitle = normalizeTitle(title);
 		const allGames = db.select().from(games).all();
-		const duplicate = allGames.find((g) => normalizeTitle(g.title) === normalizedTitle);
+		const duplicate = findDuplicateGame(allGames, { title, searchQuery, metadata });
 		if (duplicate) {
-			return fail(400, { error: `A similar game already exists: '${duplicate.title}'` });
+			return {
+				success: true,
+				alreadyExists: true,
+				gameId: duplicate.id,
+				message: `'${duplicate.title}' is already in your library.`
+			};
 		}
 
 		const versionDate = new Date(0).toISOString();
 
 		// Try IGDB metadata
 		let coverUrl: string | null = null;
+		let igdbId: number | null = null;
 		let steamAppId: number | null = null;
-		if (isIgdbEnabled()) {
-			try {
-				const cleanedTitle = cleanGameTitle(title);
-				const metadata = await getGameMetadata(cleanedTitle);
-				if (metadata) {
-					coverUrl = metadata.coverUrl ?? null;
-					steamAppId = metadata.steamAppId ?? null;
-				}
-			} catch (error) {
-				logger.warn(`Failed to fetch IGDB metadata for ${title}: ${error}`);
-			}
+		if (metadata) {
+			coverUrl = metadata.coverUrl ?? null;
+			igdbId = metadata.igdbId ?? null;
+			steamAppId = metadata.steamAppId ?? null;
 		}
 
 		const result = db
@@ -138,6 +151,7 @@ export const actions: Actions = {
 				currentVersion: null,
 				status: 'monitored',
 				coverUrl,
+				igdbId,
 				steamAppId,
 				isManual: true,
 				platformFilter,
@@ -277,6 +291,7 @@ export const actions: Actions = {
 				}
 			}
 
+			db.delete(appSettings).where(eq(appSettings.key, `skipped_releases:${id}`)).run();
 			db.delete(games).where(eq(games.id, id)).run();
 			logger.info(`Deleted game id=${id} from library`);
 			return { success: true };

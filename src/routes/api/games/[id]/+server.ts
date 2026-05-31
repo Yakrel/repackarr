@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types.js';
 import { db } from '$lib/server/database.js';
-import { games } from '$lib/server/schema.js';
+import { games, appSettings } from '$lib/server/schema.js';
 import { eq } from 'drizzle-orm';
 import { qbitService } from '$lib/server/qbit.js';
 import { logger } from '$lib/server/logger.js';
@@ -25,6 +25,7 @@ export const DELETE: RequestHandler = async ({ params, request }) => {
 			}
 		}
 
+		db.delete(appSettings).where(eq(appSettings.key, `skipped_releases:${id}`)).run();
 		db.delete(games).where(eq(games.id, id)).run();
 		logger.info(`Deleted game id=${id} from library`);
 		return json({ success: true });

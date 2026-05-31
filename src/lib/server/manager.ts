@@ -1,8 +1,8 @@
 import { db } from './database.js';
 import { games, scanLogs, releases } from './schema.js';
-import { eq, and, inArray } from 'drizzle-orm';
+import { desc, eq, inArray, lt } from 'drizzle-orm';
 import { qbitService } from './qbit.js';
-import { searchForGame, type SkipInfo } from './prowlarr.js';
+import { searchForGame } from './prowlarr.js';
 import { progressManager } from './progress.js';
 import { logger, logError } from './logger.js';
 import { compareVersions } from './utils.js';
@@ -11,6 +11,28 @@ import { tryAutoDownloadForGames } from './autoDownload.js';
 type ScanOptions = {
 	throwOnError?: boolean;
 };
+
+const SCAN_LOG_RETENTION = 50;
+
+function pruneScanLogs(): void {
+	const cutoffLog = db
+		.select({ id: scanLogs.id })
+		.from(scanLogs)
+		.orderBy(desc(scanLogs.id))
+		.limit(1)
+		.offset(SCAN_LOG_RETENTION - 1)
+		.all()
+		.at(0);
+
+	if (!cutoffLog) {
+		return;
+	}
+
+	const result = db.delete(scanLogs).where(lt(scanLogs.id, cutoffLog.id)).run();
+	if (result.changes > 0) {
+		logger.info(`Pruned ${result.changes} scan log(s), keeping latest ${SCAN_LOG_RETENTION}.`);
+	}
+}
 
 export async function runSyncLibrary(
 	currentProgress?: { start: number; total: number },
@@ -49,7 +71,6 @@ export async function runSearchUpdates(
     logger.info('Starting Prowlarr update search...');
     let scanned = 0, totalFound = 0, totalAdded = 0;
     const scanDetails: string[] = [];
-    const allSkipped: Array<{ game: string; game_id: number; items: SkipInfo[] }> = [];
     let fatalError: unknown = null;
 
     try {
@@ -67,24 +88,38 @@ export async function runSearchUpdates(
         const startOffset = currentProgress ? currentProgress.start : 0;
 
         for (const chunk of chunks) {
+            const activeTitles = new Set(chunk.map((game) => game.title));
+            const formatActiveSearches = () => {
+                const titles = Array.from(activeTitles);
+                if (titles.length === 0) return 'Finalizing scan...';
+                if (titles.length === 1) return `Searching: ${titles[0]}`;
+                return `Searching ${titles.length} games: ${titles[0]} +${titles.length - 1} more`;
+            };
+
+            progressManager.update(startOffset + processedCount, formatActiveSearches());
+
             await Promise.all(chunk.map(async (game) => {
                 try {
                     const res = await searchForGame(game.id);
                     totalFound += res.totalFound;
                     totalAdded += res.added;
-                    if (res.error) scanDetails.push(`${game.title}: ${res.error}`);
-                    if (res.skipped.length > 0) {
-                        allSkipped.push({ game: game.title, game_id: game.id, items: res.skipped });
+                    if (res.error === 'Game not found') {
+                        logger.debug(`[Scan] '${game.title}' was deleted during scan; skipping.`);
+                    } else if (res.error) {
+                        scanDetails.push(`${game.title}: ${res.error}`);
                     }
                 } catch (error) {
                     logError(`Exception while searching for ${game.title}`, error);
                     scanDetails.push(`${game.title}: Exception ${String(error)}`);
                 } finally {
                     processedCount++;
-                    progressManager.update(startOffset + processedCount, `Searched: ${game.title}`);
+                    activeTitles.delete(game.title);
+                    progressManager.update(startOffset + processedCount, formatActiveSearches());
                 }
             }));
         }
+
+        progressManager.update(startOffset + processedCount, 'Finalizing scan...');
 
         // --- STALE RELEASES CLEANUP ---
         // Final check to remove any releases that are now same/older than owned version
@@ -98,15 +133,6 @@ export async function runSearchUpdates(
                     const cmp = compareVersions(game.currentVersion, rel.parsedVersion);
                     if (cmp === 0 || cmp === 1) {
                         staleIds.push(rel.id);
-                        const skipItem: SkipInfo = {
-                            gameId: game.id, gameTitle: game.title, title: rel.rawTitle,
-                            date: rel.uploadDate, reason: `Owned version ${game.currentVersion} is same/newer`,
-                            category: 'cleanup', indexer: rel.indexer, isNewerDate: false,
-                            magnetUrl: rel.magnetUrl, infoUrl: rel.infoUrl, size: rel.size || '?'
-                        };
-                        const existing = allSkipped.find(s => s.game_id === game.id);
-                        if (existing) existing.items.push(skipItem);
-                        else allSkipped.push({ game: game.title, game_id: game.id, items: [skipItem] });
                     }
                 }
             }
@@ -161,10 +187,13 @@ export async function runSearchUpdates(
                 total_results_found: totalFound,
                 errors: scanDetails.slice(0, 10),
                 fatal_error: fatalError instanceof Error ? fatalError.message : fatalError ? String(fatalError) : null
-            }),
-            skipDetails: allSkipped.length ? JSON.stringify(allSkipped) : null
+            })
         }).run();
     } catch (e) { logError('Failed to save scan log', e); }
+
+    try {
+        pruneScanLogs();
+    } catch (e) { logError('Failed to prune scan logs', e); }
 
     if (fatalError && options.throwOnError) {
         throw fatalError;

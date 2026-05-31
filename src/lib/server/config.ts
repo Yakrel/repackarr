@@ -19,6 +19,7 @@ const coreSettingsSchema = z.object({
 	AUTH_USERNAME: z.string().optional().default(''),
 	AUTH_PASSWORD: z.string().optional().default(''),
 	CRON_INTERVAL_MINUTES: z.coerce.number().int().min(5).max(1440).default(360),
+	STARTUP_SCAN_DELAY_SECONDS: z.coerce.number().int().min(0).max(3600).default(120),
 	IGDB_CLIENT_ID: z.string().optional().default(''),
 	IGDB_CLIENT_SECRET: z.string().optional().default(''),
 	DATA_DIR: z.string().default('/app/data')
@@ -50,6 +51,7 @@ function loadCoreSettings(): CoreSettings {
 		AUTH_USERNAME: process.env.AUTH_USERNAME,
 		AUTH_PASSWORD: process.env.AUTH_PASSWORD,
 		CRON_INTERVAL_MINUTES: process.env.CRON_INTERVAL_MINUTES,
+		STARTUP_SCAN_DELAY_SECONDS: process.env.STARTUP_SCAN_DELAY_SECONDS,
 		IGDB_CLIENT_ID: process.env.IGDB_CLIENT_ID,
 		IGDB_CLIENT_SECRET: process.env.IGDB_CLIENT_SECRET,
 		DATA_DIR: process.env.DATA_DIR

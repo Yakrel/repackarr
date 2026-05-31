@@ -1,8 +1,11 @@
 import winston from 'winston';
 import 'winston-daily-rotate-file';
 import path from 'path';
+import fs from 'fs/promises';
 
 export const logDir = path.resolve(process.env.LOG_DIR || 'logs');
+const LOG_FILE_RETENTION_DAYS = 14;
+const LOG_FILE_PATTERN = /^repackarr-(\d{4})-(\d{2})-(\d{2})\.log$/;
 
 const fileTransport = new winston.transports.DailyRotateFile({
 	filename: path.join(logDir, 'repackarr-%DATE%.log'),
@@ -36,6 +39,60 @@ export const logger = winston.createLogger({
 		consoleTransport
 	]
 });
+
+function getLogRetentionCutoff(): Date {
+	const cutoff = new Date();
+	cutoff.setHours(0, 0, 0, 0);
+	cutoff.setDate(cutoff.getDate() - LOG_FILE_RETENTION_DAYS);
+	return cutoff;
+}
+
+function parseLogFileDate(fileName: string): Date | null {
+	const match = LOG_FILE_PATTERN.exec(fileName);
+	if (!match) return null;
+
+	const [, year, month, day] = match;
+	return new Date(Number(year), Number(month) - 1, Number(day));
+}
+
+export async function cleanupOldLogFiles(): Promise<void> {
+	let files: string[];
+	try {
+		files = await fs.readdir(logDir);
+	} catch (error) {
+		const code = error instanceof Error && 'code' in error ? (error as NodeJS.ErrnoException).code : null;
+		if (code === 'ENOENT') {
+			logger.debug(`Log cleanup skipped because log directory does not exist: ${logDir}`);
+			return;
+		}
+		logError('Failed to read log directory for cleanup', error);
+		return;
+	}
+
+	const cutoff = getLogRetentionCutoff();
+	let removedCount = 0;
+
+	for (const file of files) {
+		const fileDate = parseLogFileDate(file);
+		if (!fileDate || fileDate >= cutoff) continue;
+
+		const filePath = path.join(logDir, file);
+		try {
+			const stat = await fs.lstat(filePath);
+			if (!stat.isFile()) continue;
+			await fs.unlink(filePath);
+			removedCount++;
+		} catch (error) {
+			logError(`Failed to remove old log file ${file}`, error);
+		}
+	}
+
+	if (removedCount > 0) {
+		logger.info(`Cleaned up ${removedCount} old log file(s), keeping last ${LOG_FILE_RETENTION_DAYS} days.`);
+	} else {
+		logger.debug(`Log file cleanup completed; no files older than ${LOG_FILE_RETENTION_DAYS} days found.`);
+	}
+}
 
 // Helper to log errors with stack traces cleanly
 export function logError(message: string, error: unknown) {

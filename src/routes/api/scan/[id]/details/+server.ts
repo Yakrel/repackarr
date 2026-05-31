@@ -21,18 +21,8 @@ export const GET: RequestHandler = async ({ params }) => {
 		}
 	}
 
-	let skipSummary: Array<Record<string, unknown>> = [];
-	if (log.skipDetails) {
-		try {
-			skipSummary = JSON.parse(log.skipDetails);
-		} catch {
-			skipSummary = [];
-		}
-	}
-
 	return json({
 		log,
-		details,
-		skipSummary
+		details
 	});
 };

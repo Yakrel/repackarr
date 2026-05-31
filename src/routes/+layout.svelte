@@ -17,6 +17,16 @@
 	const appVersion = APP_VERSION;
 	const changelog = [
 		{
+			version: '0.1.3',
+			notes: [
+				'Automatic log retention cleanup keeps the latest 50 scan history records and removes file logs older than 14 days',
+				'Startup scans can wait for qBittorrent and Prowlarr before the first automatic scan runs',
+				'Scan log cleanup is safer and avoids deleting newly created scan history',
+				'Adding a game you already track now shows an informational message instead of a failure',
+				'Full Scan progress now shows active searches more accurately and clears stale progress state'
+			]
+		},
+		{
 			version: '0.1.2',
 			notes: [
 				'Auto-Download can now grab matching updates for you automatically',
@@ -47,17 +57,25 @@
 	let showChangelog = $state(false);
 	
 	// Progress tracking
-	let scanProgress = $state({
-		isScanning: false,
-		phase: '',
-		currentStep: 0,
-		totalSteps: 0,
-		currentItem: '',
-		percent: 0,
-		startedAt: null as string | null
-	});
+	function idleScanProgress() {
+		return {
+			isScanning: false,
+			phase: '',
+			currentStep: 0,
+			totalSteps: 0,
+			currentItem: '',
+			percent: 0,
+			startedAt: null as string | null
+		};
+	}
+
+	let scanProgress = $state(idleScanProgress());
 	let eventSource: EventSource | null = null;
 	let hasSeenActiveScan = false;
+
+	function resetScanProgress() {
+		scanProgress = idleScanProgress();
+	}
 
 	function getIcon(icon: string) {
 		const icons: Record<string, string> = {
@@ -75,6 +93,7 @@
 		}
 
 		hasSeenActiveScan = false;
+		resetScanProgress();
 	}
 
 	function startProgressTracking() {

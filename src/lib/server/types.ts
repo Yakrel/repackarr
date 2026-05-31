@@ -109,15 +109,28 @@ export interface IGDBGame {
 		url?: string;
 	}>;
 	first_release_date?: number;
+	category?: number;
+	version_parent?: number;
+	rating_count?: number;
+	total_rating_count?: number;
+	hypes?: number;
 	genres?: Array<{
 		id: number;
 		name: string;
 	}>;
-	platforms?: Array<{
+	platforms?: Array<number | {
 		id: number;
 		name: string;
 	}>;
 	summary?: string;
+}
+
+export interface IGDBSuggestion {
+	name: string;
+	display: string;
+	igdbId: number;
+	year?: number;
+	steamAppId?: number;
 }
 
 /**

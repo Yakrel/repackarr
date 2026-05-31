@@ -5,11 +5,11 @@
 
 **Repackarr** is a self-hosted companion for qBittorrent and Prowlarr that helps keep a game repack library up to date.
 
-It imports the games you already have in qBittorrent, searches Prowlarr for newer releases, and lets you either review updates manually or let AutoDL handle eligible upgrades.
-
-Repackarr is designed around **RuTracker.org** and **NoNaMe Club (NNM-Club)** release formats. Other Prowlarr indexers may work, but title parsing, version detection, and game matching are best-effort outside those trackers.
+Repackarr is designed for and tested exclusively with **RuTracker.org** and **NoNaMe Club (NNM-Club)** release formats. Other Prowlarr indexers are not supported, and title parsing or version matching will likely fail outside these two trackers.
 
 ## Screenshots
+
+*Note: Screenshots may display slightly older versions of the user interface, but the core layout and features remain identical.*
 
 ### Dashboard
 ![Repackarr Dashboard](static/screenshots/dashboard.png)
@@ -154,11 +154,10 @@ The following settings are managed from the web UI:
 
 ## Notes
 
-- Repackarr is tuned for RuTracker.org and NoNaMe Club. Other trackers may need manual search query adjustments and may not parse versions reliably.
-- Prowlarr indexer names in **Allowed Indexers** must match the names shown in Prowlarr.
-- IGDB is optional. Repackarr still works without it, but covers and autocomplete will be limited.
-- AutoDL skips a game if it is already actively downloading and shows a notification instead.
-- The torrent title parser is validated against the included golden dataset in `tests/torrent_examples.json`.
+- Repackarr is built specifically for RuTracker.org and NoNaMe Club release formats. Other trackers are not supported out-of-the-box.
+- Prowlarr indexer names in **Allowed Indexers** must match the exact names shown in Prowlarr.
+- IGDB is optional. Repackarr still works without it, but game covers and title autocomplete will not be available.
+- The title parser is validated against a dataset of real release names (`tests/torrent_examples.json`) to maintain accuracy.
 
 ## Troubleshooting
 

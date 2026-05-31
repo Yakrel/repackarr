@@ -490,42 +490,6 @@
 						</div>
 					{/if}
 
-					<!-- Skip Summary -->
-					{#if logDetail.skipSummary?.length}
-						<div class="space-y-4">
-							<h4 class="text-sm font-semibold text-slate-300">Skipped Releases</h4>
-							<div class="space-y-4">
-								{#each logDetail.skipSummary as gameSummary}
-									<div class="bg-slate-700/30 rounded-lg overflow-hidden border border-slate-700/50">
-										<div class="px-3 py-2 bg-slate-700/50 flex items-center justify-between">
-											<span class="text-sm font-bold text-white">{gameSummary.game}</span>
-											<span class="text-xs font-medium px-2 py-0.5 bg-slate-800 rounded-full text-slate-400">
-												{gameSummary.items?.length || 0} skipped
-											</span>
-										</div>
-										<div class="divide-y divide-slate-700/50">
-											{#each (gameSummary.items || []).slice(0, 15) as item}
-												<div class="px-3 py-2 hover:bg-slate-700/20 transition-colors">
-													<div class="text-[11px] text-slate-200 truncate font-mono" title={item.title}>{item.title}</div>
-													<div class="flex items-center gap-2 mt-1">
-														<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
-															{item.reason}
-														</span>
-														<span class="text-[10px] text-slate-500">{item.indexer} • {item.size}</span>
-													</div>
-												</div>
-											{/each}
-											{#if (gameSummary.items?.length || 0) > 15}
-												<div class="px-3 py-1.5 text-center text-[10px] text-slate-500 italic">
-													...and {(gameSummary.items?.length || 0) - 15} more
-												</div>
-											{/if}
-										</div>
-									</div>
-								{/each}
-							</div>
-						</div>
-					{/if}
 				{/if}
 			</div>
 		</div>
