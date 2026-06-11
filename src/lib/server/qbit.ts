@@ -86,8 +86,17 @@ class QBitService {
 		const torrents = await this.fetchTorrents();
 		if (!torrents.length) return 0;
 		const syncStartTime = new Date().toISOString();
-		const allGames = db.select().from(games).all();
-		const results = await Promise.allSettled(torrents.map((torrent) => this.processTorrent(torrent, allGames)));
+		
+		let processedCount = 0;
+		for (const torrent of torrents) {
+			try {
+				const allGames = db.select().from(games).all();
+				const success = await this.processTorrent(torrent, allGames);
+				if (success) processedCount++;
+			} catch (error) {
+				logger.error(`[qBit] Error processing torrent ${torrent.name || ''}: ${error}`);
+			}
+		}
 		
 		const currentGames = db.select().from(games).all();
 		const gamesToUnlink = currentGames.filter(g => g.qbitSyncedAt && g.qbitSyncedAt < syncStartTime);
@@ -95,7 +104,7 @@ class QBitService {
 			db.update(games).set({ qbitSyncedAt: null }).where(eq(games.id, g.id)).run();
 			logger.info(`Unlinked '${g.title}'`);
 		}
-		return results.filter(r => r.status === 'fulfilled' && r.value).length;
+		return processedCount;
 	}
 
 	private async processTorrent(torrent: QBitTorrentInfo, allGames: Array<typeof games.$inferSelect>): Promise<boolean> {
@@ -113,7 +122,16 @@ class QBitService {
 			sourceUrl = await this.fetchTorrentComment(torrent.hash);
 		}
 
-		const matchedGame = allGames.find((g) => fuzzyMatchTitles(g.title, title));
+		const matchedGame = allGames.find((g) => {
+			if (g.infoHash && g.infoHash === torrent.hash) return true;
+			if (fuzzyMatchTitles(g.title, title)) return true;
+			if (g.rawName) {
+				const parsedRawName = parseTorrentTitle(g.rawName);
+				if (parsedRawName && fuzzyMatchTitles(parsedRawName, title)) return true;
+			}
+			return false;
+		});
+
 		if (!matchedGame) {
 			return await this.addNewGame(title, sanitizeSearchQuery(title), detectedVersion, torrentDate, sourceUrl, rawName, torrent.hash);
 		} else {

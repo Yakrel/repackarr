@@ -17,6 +17,13 @@
 	const appVersion = APP_VERSION;
 	const changelog = [
 		{
+			version: '0.1.4',
+			notes: [
+				'Fixed a bug that caused games to be added multiple times as duplicates if their name matched differently on IGDB (e.g. GTA: Rio de Janeiro)',
+				'Improved library sync reliability when matching and updating existing torrents from qBittorrent'
+			]
+		},
+		{
 			version: '0.1.3',
 			notes: [
 				'Automatic log retention cleanup keeps the latest 50 scan history records and removes file logs older than 14 days',
