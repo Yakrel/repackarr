@@ -17,6 +17,13 @@
 	const appVersion = APP_VERSION;
 	const changelog = [
 		{
+			version: '0.1.5',
+			notes: [
+				'Fixed a bug where torrents were deleted from qBittorrent before verifying that the new torrent was added successfully',
+				'Added support for automatically extracting the actual info hash from qBittorrent when adding updates via HTTP/Prowlarr download links'
+			]
+		},
+		{
 			version: '0.1.4',
 			notes: [
 				'Fixed a bug that caused games to be added multiple times as duplicates if their name matched differently on IGDB (e.g. GTA: Rio de Janeiro)',

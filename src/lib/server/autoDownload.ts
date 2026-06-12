@@ -183,17 +183,16 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 		};
 	}
 
-	// Remove old torrent from qBit (keep files on disk)
-	if (game.infoHash) {
-		const removed = await qbitService.removeTorrent(game.infoHash);
-		if (removed) {
-			logger.info(`[Auto-Download] Removed old torrent for '${game.title}' (hash: ${game.infoHash})`);
-		} else {
-			logger.warn(`[Auto-Download] Could not remove old torrent for '${game.title}' — may already be gone`);
-		}
+	// 1. Get existing torrents to compare later
+	let existingHashes = new Set<string>();
+	try {
+		const existingTorrents = await qbitService.getActiveDownloads();
+		existingHashes = new Set(existingTorrents.map((t) => t.hash));
+	} catch (err) {
+		logger.warn(`[Auto-Download] Could not fetch existing torrents for '${game.title}': ${err}`);
 	}
 
-	// Add new torrent to qBittorrent
+	// 2. Add new torrent to qBittorrent
 	const qbitSuccess = await qbitService.addTorrent(magnet);
 	if (!qbitSuccess) {
 		const msg = `Failed to send ${release.rawTitle} to qBittorrent. Please check your qBittorrent connection.`;
@@ -209,8 +208,55 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 		};
 	}
 
-	// Kick off metadata polling/recheck without blocking the scan/request lifecycle.
-	const newHash = extractMagnetHash(magnet);
+	// 3. Wait for the new torrent to appear in qBittorrent
+	let newHash = extractMagnetHash(magnet);
+	let newTorrentFound = false;
+
+	if (!newHash) {
+		let attempts = 0;
+		const maxAttempts = 30; // Wait up to 30s
+		while (attempts < maxAttempts) {
+			try {
+				const currentTorrents = await qbitService.getActiveDownloads();
+				const match = currentTorrents.find((t) => !existingHashes.has(t.hash));
+				if (match) {
+					newHash = match.hash;
+					newTorrentFound = true;
+					break;
+				}
+			} catch {}
+			attempts++;
+			await delay(1000);
+		}
+	} else {
+		newTorrentFound = true;
+	}
+
+	if (!newTorrentFound || !newHash) {
+		const msg = `Failed to auto-download ${release.rawTitle} — torrent did not appear in qBittorrent within 30s.`;
+		logger.error(`[Auto-Download] ${msg}`);
+		await createNotification('auto_download_failed', game.id, game.title, msg);
+		return {
+			success: false,
+			skipped: false,
+			reason: 'qBittorrent add timed out',
+			releaseTitle: release.rawTitle,
+			selectionReason,
+			recommendationScore: release.recommendationScore
+		};
+	}
+
+	// 4. Remove old torrent from qBit only AFTER successful addition (keep files on disk)
+	if (game.infoHash && game.infoHash !== newHash) {
+		const removed = await qbitService.removeTorrent(game.infoHash);
+		if (removed) {
+			logger.info(`[Auto-Download] Removed old torrent for '${game.title}' (hash: ${game.infoHash})`);
+		} else {
+			logger.warn(`[Auto-Download] Could not remove old torrent for '${game.title}' — may already be gone`);
+		}
+	}
+
+	// 5. Kick off metadata polling/recheck without blocking the scan/request lifecycle.
 	if (newHash) {
 		void waitForMetadataAndRecheck(newHash, game.title).catch((err) => {
 			logger.warn(`[Auto-Download] Post-add processing failed for '${game.title}': ${String(err)}`);

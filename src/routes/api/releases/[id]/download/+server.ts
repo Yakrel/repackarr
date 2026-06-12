@@ -36,52 +36,89 @@ export const POST: RequestHandler = async ({ params }) => {
 		return json(errorResponse('Associated game not found'), { status: 404 });
 	}
 
-	// Remove old torrent from qBit before adding new one (keep files on disk)
-	if (game.infoHash) {
+	// 1. Get existing torrents to compare later
+	let existingHashes = new Set<string>();
+	try {
+		const existingTorrents = await qbitService.getActiveDownloads();
+		existingHashes = new Set(existingTorrents.map((t) => t.hash));
+	} catch (err) {
+		logger.warn(`Could not check existing qBit torrents for '${game.title}': ${err}`);
+	}
+
+	// 2. Send new torrent to qBittorrent
+	const qbitSuccess = await qbitService.addTorrent(magnet!);
+	if (!qbitSuccess) {
+		return json(errorResponse('Failed to send to qBittorrent'), { status: 502 });
+	}
+
+	// 3. Wait for the new torrent to appear in qBittorrent
+	let newHash = extractMagnetHash(magnet!);
+	let newTorrentFound = false;
+
+	if (!newHash) {
+		logger.info(`Adding HTTP/Prowlarr link; waiting for torrent to appear in qBittorrent...`);
+		let attempts = 0;
+		const maxAttempts = 30; // 30 saniye boyunca dene (1sn aralıklarla)
+
+		while (attempts < maxAttempts) {
+			const currentTorrents = await qbitService.getActiveDownloads();
+			const match = currentTorrents.find((t) => !existingHashes.has(t.hash));
+			if (match) {
+				newHash = match.hash;
+				newTorrentFound = true;
+				break;
+			}
+			attempts++;
+			await new Promise((r) => setTimeout(r, 1000));
+		}
+	} else {
+		newTorrentFound = true;
+	}
+
+	if (!newTorrentFound || !newHash) {
+		logger.error(`Torrent added but did not appear in qBittorrent within 30s. It may have failed to download/add.`);
+		return json(errorResponse('Torrent failed to download/add in qBittorrent. Please check qBittorrent logs.'), { status: 504 });
+	}
+
+	logger.info(`Detected new torrent for '${game.title}' in qBittorrent (hash: ${newHash})`);
+
+	// 4. Wait for metadata if size is 0 (for magnet links)
+	const torrentInfo = await qbitService.getTorrent(newHash);
+	if (torrentInfo && torrentInfo.total_size === 0) {
+		logger.info(`Waiting for metadata for '${game.title}' (hash: ${newHash})...`);
+		let metadataReceived = false;
+		let attempts = 0;
+		const maxAttempts = 30;
+
+		while (attempts < maxAttempts) {
+			const torrent = await qbitService.getTorrent(newHash);
+			if (torrent && torrent.total_size > 0) {
+				metadataReceived = true;
+				break;
+			}
+			attempts++;
+			await new Promise((r) => setTimeout(r, 1000));
+		}
+
+		if (metadataReceived) {
+			logger.info(`Metadata received for '${game.title}', starting force recheck.`);
+			await qbitService.recheckTorrent(newHash);
+		} else {
+			logger.warn(`Metadata not received for '${game.title}' within 30s. Recheck might not work correctly.`);
+			await qbitService.recheckTorrent(newHash);
+		}
+	} else {
+		logger.info(`Metadata/files already resolved for '${game.title}', starting force recheck.`);
+		await qbitService.recheckTorrent(newHash);
+	}
+
+	// 5. Remove old torrent from qBit only AFTER successful addition (keep files on disk)
+	if (game.infoHash && game.infoHash !== newHash) {
 		const removed = await qbitService.removeTorrent(game.infoHash);
 		if (removed) {
 			logger.info(`Removed old torrent from qBit for '${game.title}' (hash: ${game.infoHash})`);
 		} else {
 			logger.warn(`Could not remove old torrent from qBit for '${game.title}' — may already be gone`);
-		}
-	}
-
-        // Send new torrent to qBittorrent
-        const qbitSuccess = await qbitService.addTorrent(magnet!);
-	if (!qbitSuccess) {
-		return json(errorResponse('Failed to send to qBittorrent'), { status: 502 });
-	}
-
-	// Wait for metadata and trigger recheck
-	const newHash = extractMagnetHash(magnet!);
-	if (newHash) {
-		logger.info(`Waiting for metadata for '${game.title}' (hash: ${newHash})...`);
-		
-		let metadataReceived = false;
-		let attempts = 0;
-		const maxAttempts = 30; // 30 saniye boyunca dene (1sn aralıklarla)
-
-		while (attempts < maxAttempts) {
-			const torrent = await qbitService.getTorrent(newHash);
-			
-			// qBittorrent'te torrentin boyutu 0'dan büyükse metadata gelmiş demektir
-			if (torrent && torrent.total_size > 0) {
-				metadataReceived = true;
-				break;
-			}
-			
-			attempts++;
-			await new Promise(r => setTimeout(r, 1000));
-		}
-
-		if (metadataReceived) {
-			logger.info(`Metadata received for '${game.title}', starting force recheck.`);
-			const rechecked = await qbitService.recheckTorrent(newHash);
-			if (rechecked) logger.info(`Force recheck triggered successfully.`);
-		} else {
-			logger.warn(`Metadata not received for '${game.title}' within 30s. Recheck might not work correctly.`);
-			// Yine de son bir kez deniyoruz
-			await qbitService.recheckTorrent(newHash);
 		}
 	}
 
