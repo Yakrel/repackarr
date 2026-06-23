@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { qbitService } from '$lib/server/qbit.js';
+import { torrentClient } from '$lib/server/torrentClient.js';
 import { logError } from '$lib/server/logger.js';
 import type { RequestHandler } from './$types.js';
 
@@ -15,37 +15,37 @@ export const POST: RequestHandler = async ({ request }) => {
 		let ok = false;
 		switch (action) {
 			case 'pause':
-				ok = await qbitService.pauseTorrent(hash);
+				ok = await torrentClient.pauseTorrent(hash);
 				break;
 			case 'resume':
-				ok = await qbitService.resumeTorrent(hash);
+				ok = await torrentClient.resumeTorrent(hash);
 				break;
 			case 'recheck':
-				ok = await qbitService.recheckTorrent(hash);
+				ok = await torrentClient.recheckTorrent(hash);
 				break;
 			case 'reannounce':
-				ok = await qbitService.reannounceTorrent(hash);
+				ok = await torrentClient.reannounceTorrent(hash);
 				break;
 			case 'setDlLimit': {
 				const limitKbps: number = body.limitKbps ?? 0;
 				const limitBytes = limitKbps > 0 ? Math.round(limitKbps * 1024) : 0;
-				ok = await qbitService.setTorrentDownloadLimit(hash, limitBytes);
+				ok = await torrentClient.setTorrentDownloadLimit(hash, limitBytes);
 				break;
 			}
 			case 'setUpLimit': {
 				const limitKbps: number = body.limitKbps ?? 0;
 				const limitBytes = limitKbps > 0 ? Math.round(limitKbps * 1024) : 0;
-				ok = await qbitService.setTorrentUploadLimit(hash, limitBytes);
+				ok = await torrentClient.setTorrentUploadLimit(hash, limitBytes);
 				break;
 			}
 			default:
 				return json({ error: 'Unknown action' }, { status: 400 });
 		}
 
-		if (!ok) return json({ error: 'qBittorrent action failed' }, { status: 502 });
+		if (!ok) return json({ error: 'Torrent client action failed' }, { status: 502 });
 		return json({ success: true });
 	} catch (error) {
-		logError('qbit control error', error);
+		logError('torrent client control error', error);
 		return json({ error: 'Internal error' }, { status: 500 });
 	}
 };

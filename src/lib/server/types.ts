@@ -5,7 +5,7 @@
 /**
  * qBittorrent torrent info response
  */
-export interface QBitTorrentInfo {
+export interface TorrentInfo {
 	name: string;
 	hash: string;
 	comment?: string;

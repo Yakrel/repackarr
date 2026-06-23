@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types.js';
 import { db, transaction } from '$lib/server/database.js';
 import { releases, games } from '$lib/server/schema.js';
 import { eq } from 'drizzle-orm';
-import { qbitService } from '$lib/server/qbit.js';
+import { torrentClient } from '$lib/server/torrentClient.js';
 import {
 	validateId,
 	validateDownloadUrl,
@@ -39,29 +39,29 @@ export const POST: RequestHandler = async ({ params }) => {
 	// 1. Get existing torrents to compare later
 	let existingHashes = new Set<string>();
 	try {
-		const existingTorrents = await qbitService.getActiveDownloads();
+		const existingTorrents = await torrentClient.getActiveDownloads();
 		existingHashes = new Set(existingTorrents.map((t) => t.hash));
 	} catch (err) {
-		logger.warn(`Could not check existing qBit torrents for '${game.title}': ${err}`);
+		logger.warn(`Could not check existing torrents for '${game.title}': ${err}`);
 	}
 
-	// 2. Send new torrent to qBittorrent
-	const qbitSuccess = await qbitService.addTorrent(magnet!);
-	if (!qbitSuccess) {
-		return json(errorResponse('Failed to send to qBittorrent'), { status: 502 });
+	// 2. Send new torrent to client
+	const clientSuccess = await torrentClient.addTorrent(magnet!);
+	if (!clientSuccess) {
+		return json(errorResponse('Failed to send to client'), { status: 502 });
 	}
 
-	// 3. Wait for the new torrent to appear in qBittorrent
+	// 3. Wait for the new torrent to appear in client
 	let newHash = extractMagnetHash(magnet!);
 	let newTorrentFound = false;
 
 	if (!newHash) {
-		logger.info(`Adding HTTP/Prowlarr link; waiting for torrent to appear in qBittorrent...`);
+		logger.info(`Adding HTTP/Prowlarr link; waiting for torrent to appear in client...`);
 		let attempts = 0;
 		const maxAttempts = 30; // 30 saniye boyunca dene (1sn aralıklarla)
 
 		while (attempts < maxAttempts) {
-			const currentTorrents = await qbitService.getActiveDownloads();
+			const currentTorrents = await torrentClient.getActiveDownloads();
 			const match = currentTorrents.find((t) => !existingHashes.has(t.hash));
 			if (match) {
 				newHash = match.hash;
@@ -76,14 +76,14 @@ export const POST: RequestHandler = async ({ params }) => {
 	}
 
 	if (!newTorrentFound || !newHash) {
-		logger.error(`Torrent added but did not appear in qBittorrent within 30s. It may have failed to download/add.`);
-		return json(errorResponse('Torrent failed to download/add in qBittorrent. Please check qBittorrent logs.'), { status: 504 });
+		logger.error(`Torrent added but did not appear in client within 30s. It may have failed to download/add.`);
+		return json(errorResponse('Torrent failed to download/add in client. Please check client logs.'), { status: 504 });
 	}
 
-	logger.info(`Detected new torrent for '${game.title}' in qBittorrent (hash: ${newHash})`);
+	logger.info(`Detected new torrent for '${game.title}' in client (hash: ${newHash})`);
 
 	// 4. Wait for metadata if size is 0 (for magnet links)
-	const torrentInfo = await qbitService.getTorrent(newHash);
+	const torrentInfo = await torrentClient.getTorrent(newHash);
 	if (torrentInfo && torrentInfo.total_size === 0) {
 		logger.info(`Waiting for metadata for '${game.title}' (hash: ${newHash})...`);
 		let metadataReceived = false;
@@ -91,7 +91,7 @@ export const POST: RequestHandler = async ({ params }) => {
 		const maxAttempts = 30;
 
 		while (attempts < maxAttempts) {
-			const torrent = await qbitService.getTorrent(newHash);
+			const torrent = await torrentClient.getTorrent(newHash);
 			if (torrent && torrent.total_size > 0) {
 				metadataReceived = true;
 				break;
@@ -102,27 +102,27 @@ export const POST: RequestHandler = async ({ params }) => {
 
 		if (metadataReceived) {
 			logger.info(`Metadata received for '${game.title}', starting force recheck.`);
-			await qbitService.recheckTorrent(newHash);
+			await torrentClient.recheckTorrent(newHash);
 		} else {
 			logger.warn(`Metadata not received for '${game.title}' within 30s. Recheck might not work correctly.`);
-			await qbitService.recheckTorrent(newHash);
+			await torrentClient.recheckTorrent(newHash);
 		}
 	} else {
 		logger.info(`Metadata/files already resolved for '${game.title}', starting force recheck.`);
-		await qbitService.recheckTorrent(newHash);
+		await torrentClient.recheckTorrent(newHash);
 	}
 
-	// 5. Remove old torrent from qBit only AFTER successful addition (keep files on disk)
+	// 5. Remove old torrent from client only AFTER successful addition (keep files on disk)
 	if (game.infoHash && game.infoHash !== newHash) {
-		const removed = await qbitService.removeTorrent(game.infoHash);
+		const removed = await torrentClient.removeTorrent(game.infoHash);
 		if (removed) {
-			logger.info(`Removed old torrent from qBit for '${game.title}' (hash: ${game.infoHash})`);
+			logger.info(`Removed old torrent from client for '${game.title}' (hash: ${game.infoHash})`);
 		} else {
-			logger.warn(`Could not remove old torrent from qBit for '${game.title}' — may already be gone`);
+			logger.warn(`Could not remove old torrent from client for '${game.title}' — may already be gone`);
 		}
 	}
 
-	// Only after successful qBit addition, update database in a transaction
+	// Only after successful client addition, update database in a transaction
 	// This ensures atomicity: either all DB updates succeed or none do
 	try {
 		const nextRawName = release.rawTitle;
@@ -145,9 +145,9 @@ export const POST: RequestHandler = async ({ params }) => {
 			db.delete(releases).where(eq(releases.gameId, game.id)).run();
 		});
 		
-		return json(successResponse('Sent to qBittorrent'));
+		return json(successResponse('Sent to client'));
 	} catch (error) {
-		logger.error('Failed to update database after successful qBit addition:', error);
-		return json(errorResponse('Torrent added to qBittorrent but failed to update database. Please refresh.'), { status: 500 });
+		logger.error('Failed to update database after successful client addition:', error);
+		return json(errorResponse('Torrent added to client but failed to update database. Please refresh.'), { status: 500 });
 	}
 };

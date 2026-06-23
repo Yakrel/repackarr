@@ -8,7 +8,7 @@ import { isIgdbEnabled } from '$lib/server/config.js';
 import { getGameMetadata, getGameMetadataById } from '$lib/server/igdb.js';
 import { searchForGame } from '$lib/server/prowlarr.js';
 import { logger } from '$lib/server/logger.js';
-import { qbitService } from '$lib/server/qbit.js';
+import { torrentClient } from '$lib/server/torrentClient.js';
 import { tryAutoDownloadForGame } from '$lib/server/autoDownload.js';
 import { findDuplicateGame } from '$lib/server/gameDuplicates.js';
 
@@ -282,11 +282,11 @@ export const actions: Actions = {
 			if (deleteFromQbit) {
 				const game = db.select({ infoHash: games.infoHash, title: games.title }).from(games).where(eq(games.id, id)).get();
 				if (game?.infoHash) {
-					const ok = await qbitService.removeTorrent(game.infoHash, deleteFiles);
+					const ok = await torrentClient.removeTorrent(game.infoHash, deleteFiles);
 					if (!ok) {
-						logger.warn(`Failed to remove torrent from qBittorrent for game "${game.title}" (hash: ${game.infoHash})`);
+						logger.warn(`Failed to remove torrent from client for game "${game.title}" (hash: ${game.infoHash})`);
 					} else {
-						logger.info(`Removed torrent from qBittorrent for game "${game.title}" (deleteFiles: ${deleteFiles})`);
+						logger.info(`Removed torrent from client for game "${game.title}" (deleteFiles: ${deleteFiles})`);
 					}
 				}
 			}

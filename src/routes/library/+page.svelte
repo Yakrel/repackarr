@@ -66,7 +66,7 @@
 	const editLocalCache = new Map<string, GameSuggestion[]>();
 	let isEditingSearching = $state(false);
 
-	// qBittorrent status polling
+	// Client status polling
 	let qbitStatus = $state<Record<number, {
 		hash: string;
 		progress: number;
@@ -205,7 +205,7 @@
 			if (resp.ok) {
 				const data = await resp.json();
 				qbitStatus = data;
-				// Sync live limits from qBittorrent
+				// Sync live limits from client
 				const newDlLimits: Record<number, number> = {};
 				const newUlLimits: Record<number, number> = {};
 				for (const [id, status] of Object.entries(data) as [string, typeof data[0]][]) {
@@ -787,7 +787,7 @@
 		{#if data.games.length === 0}
 			<div class="p-8 text-center text-slate-400">
 				<p class="text-lg">No games in library</p>
-				<p class="text-sm mt-1">Add games manually or sync from qBittorrent</p>
+				<p class="text-sm mt-1">Add games manually or sync from {data.torrentClientType || 'torrent client'}</p>
 			</div>
 		{:else}
 			<table class="w-full">
@@ -855,9 +855,9 @@
 										<div class="flex items-center gap-2 mb-1">
 											<div class="font-medium text-white text-sm">{game.cleanTitle}</div>
 											{#if game.qbitSyncedAt}
-												<span class="px-1.5 py-0.5 text-[10px] font-semibold text-blue-300 bg-blue-500/20 rounded border border-blue-500/30" title="Synced from qBittorrent">qBit</span>
+												<span class="px-1.5 py-0.5 text-[10px] font-semibold text-blue-300 bg-blue-500/20 rounded border border-blue-500/30" title="Synced from {data.torrentClientType || 'torrent client'}">{data.torrentClientType === 'Transmission' ? 'Trans' : 'qBit'}</span>
 											{:else if game.isManual}
-												<span class="px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 bg-slate-500/10 rounded border border-slate-500/20" title="Manually added, not linked to qBittorrent">Manual</span>
+												<span class="px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 bg-slate-500/10 rounded border border-slate-500/20" title="Manually added, not linked to {data.torrentClientType || 'torrent client'}">Manual</span>
 											{/if}
 										</div>
 
@@ -1642,7 +1642,7 @@
 							class="w-4 h-4 rounded border-slate-600 bg-slate-700 text-red-500 focus:ring-red-500/30 cursor-pointer"
 						/>
 						<span class="text-sm text-slate-300 group-hover:text-white transition-colors">
-							Also remove torrent from qBittorrent
+							Also remove torrent from {data.torrentClientType || 'torrent client'}
 						</span>
 					</label>
 					{#if deleteModalDeleteFromQbit}

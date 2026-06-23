@@ -59,7 +59,7 @@
 			const result: ApiResponse = await resp.json();
 
 			if (result.success) {
-				const successMsg = action === 'download' ? 'Sent to qBittorrent' : action === 'confirm' ? 'Version confirmed' : 'Release ignored';
+				const successMsg = action === 'download' ? `Sent to ${data.torrentClientType || 'torrent client'}` : action === 'confirm' ? 'Version confirmed' : 'Release ignored';
 				toastStore.success(successMsg);
 				
 				actionFeedback[releaseId] = {
@@ -234,8 +234,8 @@
 								<span
 									class="text-xs text-slate-400"
 									title={game.currentVersion && game.currentVersionDate !== '1970-01-01T00:00:00.000Z'
-										? `This value is detected from qBittorrent sync or set with the Installed action.\nLocal version: v${game.currentVersion}\nLast detected: ${new Date(game.currentVersionDate).toLocaleString()}`
-										: 'No local version has been detected yet.\nThis game may be manually tracked or not synced from qBittorrent yet.'}
+										? `This value is detected from ${data.torrentClientType || 'torrent client'} sync or set with the Installed action.\nLocal version: v${game.currentVersion}\nLast detected: ${new Date(game.currentVersionDate).toLocaleString()}`
+										: `No local version has been detected yet.\nThis game may be manually tracked or not synced from ${data.torrentClientType || 'torrent client'} yet.`}
 								>
 									Local version:
 									{#if game.currentVersion && game.currentVersionDate !== '1970-01-01T00:00:00.000Z'}
@@ -320,7 +320,7 @@
 											<button
 												onclick={() => releaseAction(release.id, 'download', game.id)}
 												class="group relative px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white text-xs font-medium rounded-lg transition-all shadow-md hover:shadow-emerald-500/50 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-												title="Send to qBittorrent"
+												title="Send to {data.torrentClientType || 'torrent client'}"
 												disabled={actionFeedback[release.id]?.type === 'loading'}
 											>
 												<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

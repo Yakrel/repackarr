@@ -29,10 +29,11 @@ export const load: PageServerLoad = async () => {
 	return {
 		settings: {
 			CRON_INTERVAL_MINUTES: settings.CRON_INTERVAL_MINUTES,
-			QBIT_HOST: settings.QBIT_HOST,
-			QBIT_USERNAME: settings.QBIT_USERNAME,
-			QBIT_PASSWORD: settings.QBIT_PASSWORD ? '********' : '',
-			QBIT_CATEGORY: settings.QBIT_CATEGORY,
+			TORRENT_CLIENT_TYPE: settings.TRANSMISSION_HOST ? 'Transmission' : 'qBittorrent',
+			TORRENT_HOST: settings.TRANSMISSION_HOST ? settings.TRANSMISSION_HOST : settings.QBIT_HOST,
+			TORRENT_USERNAME: settings.TRANSMISSION_HOST ? settings.TRANSMISSION_USERNAME : settings.QBIT_USERNAME,
+			TORRENT_PASSWORD: (settings.TRANSMISSION_HOST ? settings.TRANSMISSION_PASSWORD : settings.QBIT_PASSWORD) ? '********' : '',
+			TORRENT_CATEGORY_LABEL: settings.TRANSMISSION_HOST ? settings.TRANSMISSION_LABEL : settings.QBIT_CATEGORY,
 			PROWLARR_URL: settings.PROWLARR_URL,
 			PROWLARR_API_KEY: settings.PROWLARR_API_KEY ? `${settings.PROWLARR_API_KEY.slice(0, 4)}...${settings.PROWLARR_API_KEY.slice(-4)}` : '',
 			IGDB_CLIENT_ID: settings.IGDB_CLIENT_ID ? `${settings.IGDB_CLIENT_ID.slice(0, 4)}...` : '',
@@ -40,6 +41,7 @@ export const load: PageServerLoad = async () => {
 			PLATFORM_FILTER: settings.PLATFORM_FILTER,
 			IGNORED_KEYWORDS: settings.IGNORED_KEYWORDS,
 			ALLOWED_INDEXERS: settings.ALLOWED_INDEXERS
+
 		},
 		ignoredReleases: ignored,
 		stats

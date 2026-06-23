@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { qbitService } from '$lib/server/qbit.js';
+import { torrentClient } from '$lib/server/torrentClient.js';
 import { db } from '$lib/server/database.js';
 import { games } from '$lib/server/schema.js';
 import { logError, logger } from '$lib/server/logger.js';
@@ -29,7 +29,7 @@ let pendingRequest: Promise<Record<number, QbitStatus>> | null = null;
 
 async function buildStatusMap(): Promise<Record<number, QbitStatus>> {
 	const startedAt = Date.now();
-	const torrents = await qbitService.getActiveDownloads();
+	const torrents = await torrentClient.getActiveDownloads();
 	const allGames = db.select().from(games).all();
 	const statusMap: Record<number, QbitStatus> = {};
 
@@ -83,7 +83,7 @@ export const GET: RequestHandler = async () => {
 		const statusMap = await pendingRequest;
 		return json(statusMap ?? {});
 	} catch (error) {
-		logError('Failed to fetch qbit status', error);
+		logError('Failed to fetch torrent client status', error);
 		return json({}, { status: 500 });
 	}
 };

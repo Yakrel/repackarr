@@ -7,7 +7,7 @@
 	import { toastStore } from '$lib/stores/toast.js';
 	import { APP_VERSION } from '$lib/version.js';
 
-	let { children } = $props();
+	let { children, data } = $props();
 
 	const navItems = [
 		{ href: '/', label: 'Dashboard', icon: 'home' },
@@ -289,7 +289,7 @@
 					onclick={handleSync}
 					disabled={scanning}
 					class="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 border border-slate-600/50 text-sm font-medium text-slate-300 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-					title="Sync library from qBittorrent"
+					title="Sync library from {data.torrentClientType || 'torrent client'}"
 				>
 					{#if scanning}
 						<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">

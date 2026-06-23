@@ -12,7 +12,7 @@ import {
 } from './utils.js';
 import { getGameMetadata } from './igdb.js';
 import { retryAsync } from './validators.js';
-import type { QBitTorrentInfo } from './types.js';
+import type { TorrentInfo } from './types.js';
 
 class QBitService {
 	private baseUrl: string;
@@ -48,7 +48,7 @@ class QBitService {
 		} catch { return false; }
 	}
 
-	private async fetchTorrents(retried = false): Promise<QBitTorrentInfo[]> {
+	private async fetchTorrents(retried = false): Promise<TorrentInfo[]> {
 		if (!(await this.login())) return [];
 		try {
 			const resp = await fetch(`${this.baseUrl}/api/v2/torrents/info?category=${encodeURIComponent(settings.QBIT_CATEGORY)}`, { headers: { Cookie: this.cookies } });
@@ -67,11 +67,11 @@ class QBitService {
 		} catch { return null; }
 	}
 
-	async getActiveDownloads(): Promise<QBitTorrentInfo[]> {
+	async getActiveDownloads(): Promise<TorrentInfo[]> {
 		return this.fetchTorrents();
 	}
 
-	async getTorrent(hash: string, retried = false): Promise<QBitTorrentInfo | null> {
+	async getTorrent(hash: string, retried = false): Promise<TorrentInfo | null> {
 		if (!(await this.login())) return null;
 		try {
 			const resp = await fetch(`${this.baseUrl}/api/v2/torrents/info?hashes=${hash}`, { headers: { Cookie: this.cookies } });
@@ -107,7 +107,7 @@ class QBitService {
 		return processedCount;
 	}
 
-	private async processTorrent(torrent: QBitTorrentInfo, allGames: Array<typeof games.$inferSelect>): Promise<boolean> {
+	private async processTorrent(torrent: TorrentInfo, allGames: Array<typeof games.$inferSelect>): Promise<boolean> {
 		const ts = torrent.added_on || torrent.completion_on || 0;
 		if (ts <= 0) return false;
 
@@ -190,17 +190,40 @@ class QBitService {
 		try {
 			const success = await retryAsync(
 				async () => {
+					let body: any;
+					const headers: any = { Cookie: this.cookies };
+
+					if (magnetUrl.startsWith('http://') || magnetUrl.startsWith('https://')) {
+						logger.debug(`[qBit] Downloading .torrent from URL before sending to client...`);
+						const response = await fetch(magnetUrl);
+						if (!response.ok) {
+							logger.error(`[qBit] Failed to download .torrent file: ${response.status} ${response.statusText}`);
+							return false;
+						}
+						const buffer = await response.arrayBuffer();
+						const formData = new FormData();
+						formData.append('torrents', new Blob([buffer]), 'download.torrent');
+						formData.append('category', settings.QBIT_CATEGORY);
+						body = formData;
+					} else {
+						headers['Content-Type'] = 'application/x-www-form-urlencoded';
+						body = new URLSearchParams({ urls: magnetUrl, category: settings.QBIT_CATEGORY });
+					}
+
 					const resp = await fetch(`${this.baseUrl}/api/v2/torrents/add`, {
 						method: 'POST',
-						headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: this.cookies },
-						body: new URLSearchParams({ urls: magnetUrl, category: settings.QBIT_CATEGORY })
+						headers,
+						body
 					});
 					return resp.ok;
 				},
 				{ maxAttempts: 2, delayMs: 1000 }
 			);
 			return success;
-		} catch { return false; }
+		} catch (error) {
+			logger.error(`[qBit] Error adding torrent: ${error}`);
+			return false;
+		}
 	}
 
 	async removeTorrent(hash: string, deleteFiles = false, retried = false): Promise<boolean> {

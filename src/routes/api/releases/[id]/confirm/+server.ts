@@ -5,7 +5,7 @@ import { releases, games } from '$lib/server/schema.js';
 import { eq } from 'drizzle-orm';
 import { validateId, successResponse, errorResponse } from '$lib/server/validators.js';
 import { logger } from '$lib/server/logger.js';
-import { qbitService } from '$lib/server/qbit.js';
+import { torrentClient } from '$lib/server/torrentClient.js';
 
 export const POST: RequestHandler = async ({ params }) => {
 	const id = validateId(params.id);
@@ -24,13 +24,13 @@ export const POST: RequestHandler = async ({ params }) => {
 	}
 
 	try {
-		// Remove old torrent from qBit (keep files on disk)
+		// Remove old torrent from client (keep files on disk)
 		if (game.infoHash) {
-			const removed = await qbitService.removeTorrent(game.infoHash);
+			const removed = await torrentClient.removeTorrent(game.infoHash);
 			if (removed) {
-				logger.info(`Removed old torrent from qBit for '${game.title}' (hash: ${game.infoHash})`);
+				logger.info(`Removed old torrent from client for '${game.title}' (hash: ${game.infoHash})`);
 			} else {
-				logger.warn(`Could not remove old torrent from qBit for '${game.title}' — may already be gone`);
+				logger.warn(`Could not remove old torrent from client for '${game.title}' — may already be gone`);
 			}
 		}
 

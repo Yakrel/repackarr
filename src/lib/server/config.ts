@@ -9,12 +9,31 @@ import { logger } from './logger.js';
 dotenv.config();
 
 // Core settings are infrastructure related and stay in .env
+const hostSchema = z.preprocess((val) => {
+	if (typeof val !== 'string') return '';
+	let trimmed = val.trim();
+	if (!trimmed) return '';
+	if (!/^https?:\/\//i.test(trimmed)) {
+		trimmed = 'http://' + trimmed;
+	}
+	try {
+		new URL(trimmed);
+		return trimmed;
+	} catch {
+		return '';
+	}
+}, z.string().default(''));
+
 const coreSettingsSchema = z.object({
-	QBIT_HOST: z.string().url().catch(''),
+	QBIT_HOST: hostSchema,
 	QBIT_USERNAME: z.string().default(''),
 	QBIT_PASSWORD: z.string().default(''),
 	QBIT_CATEGORY: z.string().default('games'),
-	PROWLARR_URL: z.string().url().catch(''),
+	TRANSMISSION_HOST: hostSchema,
+	TRANSMISSION_USERNAME: z.string().default(''),
+	TRANSMISSION_PASSWORD: z.string().default(''),
+	TRANSMISSION_LABEL: z.string().default('games'),
+	PROWLARR_URL: hostSchema,
 	PROWLARR_API_KEY: z.string().default(''),
 	AUTH_USERNAME: z.string().optional().default(''),
 	AUTH_PASSWORD: z.string().optional().default(''),
@@ -46,6 +65,10 @@ function loadCoreSettings(): CoreSettings {
 		QBIT_USERNAME: process.env.QBIT_USERNAME,
 		QBIT_PASSWORD: process.env.QBIT_PASSWORD,
 		QBIT_CATEGORY: process.env.QBIT_CATEGORY,
+		TRANSMISSION_HOST: process.env.TRANSMISSION_HOST,
+		TRANSMISSION_USERNAME: process.env.TRANSMISSION_USERNAME,
+		TRANSMISSION_PASSWORD: process.env.TRANSMISSION_PASSWORD,
+		TRANSMISSION_LABEL: process.env.TRANSMISSION_LABEL,
 		PROWLARR_URL: process.env.PROWLARR_URL,
 		PROWLARR_API_KEY: process.env.PROWLARR_API_KEY,
 		AUTH_USERNAME: process.env.AUTH_USERNAME,
@@ -56,8 +79,11 @@ function loadCoreSettings(): CoreSettings {
 		IGDB_CLIENT_SECRET: process.env.IGDB_CLIENT_SECRET,
 		DATA_DIR: process.env.DATA_DIR
 	});
-	if (!_coreSettings.QBIT_HOST)
-		logger.warn('[Config] QBIT_HOST is not set or invalid — qBittorrent will be unavailable.');
+	if (_coreSettings.QBIT_HOST && _coreSettings.TRANSMISSION_HOST) {
+		logger.warn('[Config] CONFLICT: Both QBIT_HOST and TRANSMISSION_HOST are set. Repackarr expects only ONE torrent client.');
+	} else if (!_coreSettings.QBIT_HOST && !_coreSettings.TRANSMISSION_HOST) {
+		logger.warn('[Config] No torrent client configured (missing QBIT_HOST or TRANSMISSION_HOST) — downloading will be unavailable.');
+	}
 	if (!_coreSettings.PROWLARR_URL)
 		logger.warn('[Config] PROWLARR_URL is not set or invalid — Prowlarr searches will fail.');
 	return _coreSettings;

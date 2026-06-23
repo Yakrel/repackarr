@@ -1,7 +1,7 @@
 import { db } from './database.js';
 import { games, scanLogs, releases } from './schema.js';
 import { desc, eq, inArray, lt } from 'drizzle-orm';
-import { qbitService } from './qbit.js';
+import { torrentClient } from './torrentClient.js';
 import { searchForGame } from './prowlarr.js';
 import { progressManager } from './progress.js';
 import { logger, logError } from './logger.js';
@@ -38,15 +38,15 @@ export async function runSyncLibrary(
 	currentProgress?: { start: number; total: number },
 	options: ScanOptions = {}
 ): Promise<number> {
-    logger.info('Starting library sync from qBittorrent...');
+    logger.info('Starting library sync from torrent client...');
     try {
         if (currentProgress) {
-            progressManager.update(currentProgress.start, 'Connecting to qBittorrent...');
+            progressManager.update(currentProgress.start, 'Connecting to torrent client...');
         } else {
             progressManager.startScan('Syncing', 1);
-            progressManager.update(0, 'Connecting to qBittorrent...');
+            progressManager.update(0, 'Connecting to torrent client...');
         }
-        const synced = await qbitService.syncGames();
+        const synced = await torrentClient.syncGames();
         if (currentProgress) {
             progressManager.update(currentProgress.start + 1, 'Library sync complete');
         } else {

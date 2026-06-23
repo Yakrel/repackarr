@@ -13,7 +13,7 @@
 	let resetting = $state(false);
 
 	// Connection Test States
-	let testingQbit = $state(false);
+	let testingTorrent = $state(false);
 	let testingProwlarr = $state(false);
 	let testingIgdb = $state(false);
 
@@ -29,26 +29,27 @@
 		}
 	});
 
-	async function testConnection(type: 'qbit' | 'prowlarr' | 'igdb') {
-		if (type === 'qbit') testingQbit = true;
+	async function testConnection(type: 'torrent' | 'prowlarr' | 'igdb') {
+		if (type === 'torrent') testingTorrent = true;
 		else if (type === 'prowlarr') testingProwlarr = true;
 		else testingIgdb = true;
 
 		try {
-			const resp = await fetch(`/api/test/${type}`, { method: 'POST' });
+			const endpoint = type === 'torrent' ? 'torrent-client' : type;
+			const resp = await fetch(`/api/test/${endpoint}`, { method: 'POST' });
 			const result = await resp.json();
 
-			const serviceName = type === 'qbit' ? 'qBittorrent' : type === 'prowlarr' ? 'Prowlarr' : 'IGDB';
+			const serviceName = type === 'torrent' ? data.settings.TORRENT_CLIENT_TYPE : type === 'prowlarr' ? 'Prowlarr' : 'IGDB';
 			if (result.success) {
 				toastStore.success(result.message, serviceName);
 			} else {
 				toastStore.error(result.message, serviceName);
 			}
 		} catch (error) {
-			const serviceName = type === 'qbit' ? 'qBittorrent' : type === 'prowlarr' ? 'Prowlarr' : 'IGDB';
+			const serviceName = type === 'torrent' ? data.settings.TORRENT_CLIENT_TYPE : type === 'prowlarr' ? 'Prowlarr' : 'IGDB';
 			toastStore.error('Network error', serviceName);
 		} finally {
-			if (type === 'qbit') testingQbit = false;
+			if (type === 'torrent') testingTorrent = false;
 			else if (type === 'prowlarr') testingProwlarr = false;
 			else testingIgdb = false;
 		}
@@ -294,7 +295,7 @@
 					</div>
 				</div>
 
-				<!-- qBittorrent -->
+				<!-- Torrent Client -->
 				<div class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-xl">
 					<div class="px-6 py-4 border-b border-slate-700 bg-blue-500/10 flex items-center justify-between">
 						<div class="flex items-center gap-3">
@@ -303,14 +304,14 @@
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
 								</svg>
 							</div>
-							<h3 class="text-lg font-bold text-white">qBittorrent</h3>
+							<h3 class="text-lg font-bold text-white">{data.settings.TORRENT_CLIENT_TYPE}</h3>
 						</div>
 						<button
-							onclick={() => testConnection('qbit')}
-							disabled={testingQbit}
+							onclick={() => testConnection('torrent')}
+							disabled={testingTorrent}
 							class="px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 text-xs font-bold rounded-lg border border-blue-500/30 transition-all flex items-center gap-2"
 						>
-							{#if testingQbit}
+							{#if testingTorrent}
 								<svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
 									<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
 									<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -323,20 +324,20 @@
 						<div class="space-y-1">
 							<span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Host</span>
 							<div class="text-sm text-slate-300 font-mono bg-slate-900/50 px-3 py-2 rounded-lg border border-slate-700/50 truncate">
-								{data.settings.QBIT_HOST || 'Not Set'}
+								{data.settings.TORRENT_HOST || 'Not Set'}
 							</div>
 						</div>
 						<div class="grid grid-cols-2 gap-4">
 							<div class="space-y-1">
 								<span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">User</span>
 								<div class="text-sm text-slate-300 font-mono bg-slate-900/50 px-3 py-2 rounded-lg border border-slate-700/50">
-									{data.settings.QBIT_USERNAME || 'Not Set'}
+									{data.settings.TORRENT_USERNAME || 'Not Set'}
 								</div>
 							</div>
 							<div class="space-y-1">
-								<span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Category</span>
+								<span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Label/Category</span>
 								<div class="text-sm text-slate-300 font-mono bg-slate-900/50 px-3 py-2 rounded-lg border border-slate-700/50">
-									{data.settings.QBIT_CATEGORY}
+									{data.settings.TORRENT_CATEGORY_LABEL || 'Not Set'}
 								</div>
 							</div>
 						</div>

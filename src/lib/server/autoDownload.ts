@@ -1,12 +1,12 @@
 import { db, transaction } from './database.js';
 import { games, releases, notifications, appSettings } from './schema.js';
 import { eq, and, lt } from 'drizzle-orm';
-import { qbitService } from './qbit.js';
+import { torrentClient } from './torrentClient.js';
 import { logger } from './logger.js';
 import { extractMagnetHash } from './validators.js';
 import { rankGameReleases } from './releaseSelection.js';
 
-// qBittorrent states that indicate an active, in-progress download
+// Torrent client states that indicate an active, in-progress download
 const ACTIVE_DOWNLOAD_STATES = new Set([
 	'downloading',
 	'stalledDL',
@@ -67,7 +67,7 @@ async function waitForMetadataAndRecheck(hash: string, gameTitle: string): Promi
 	let metadataReceived = false;
 
 	for (let attempt = 0; attempt < maxAttempts; attempt++) {
-		const torrent = await qbitService.getTorrent(hash);
+		const torrent = await torrentClient.getTorrent(hash);
 		if (torrent && torrent.total_size > 0) {
 			metadataReceived = true;
 			break;
@@ -84,7 +84,7 @@ async function waitForMetadataAndRecheck(hash: string, gameTitle: string): Promi
 		);
 	}
 
-	const recheckStarted = await qbitService.recheckTorrent(hash);
+	const recheckStarted = await torrentClient.recheckTorrent(hash);
 	if (!recheckStarted) {
 		logger.warn(`[Auto-Download] Failed to trigger recheck for '${gameTitle}' (hash: ${hash})`);
 	}
@@ -143,10 +143,10 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 		};
 	}
 
-	// Check for active download in qBittorrent
+	// Check for active download in torrent client
 	if (game.infoHash) {
 		try {
-			const torrent = await qbitService.getTorrent(game.infoHash);
+			const torrent = await torrentClient.getTorrent(game.infoHash);
 			if (torrent && isActivelyDownloading(torrent.state)) {
 				const msg = `New version ${release.parsedVersion ?? 'unknown'} found, but ${game.title} is currently downloading (${Math.round(torrent.progress * 100)}%). Click to switch versions.`;
 				logger.info(`[Auto-Download] Skipping ${game.title} — active download detected (state: ${torrent.state})`);
@@ -162,7 +162,7 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 				};
 			}
 		} catch (err) {
-			logger.warn(`[Auto-Download] Could not check qBit state for ${game.title}: ${err}`);
+			logger.warn(`[Auto-Download] Could not check torrent client state for ${game.title}: ${err}`);
 			// Don't block auto-download if we can't check the state
 		}
 	}
@@ -186,29 +186,29 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 	// 1. Get existing torrents to compare later
 	let existingHashes = new Set<string>();
 	try {
-		const existingTorrents = await qbitService.getActiveDownloads();
+		const existingTorrents = await torrentClient.getActiveDownloads();
 		existingHashes = new Set(existingTorrents.map((t) => t.hash));
 	} catch (err) {
 		logger.warn(`[Auto-Download] Could not fetch existing torrents for '${game.title}': ${err}`);
 	}
 
-	// 2. Add new torrent to qBittorrent
-	const qbitSuccess = await qbitService.addTorrent(magnet);
-	if (!qbitSuccess) {
-		const msg = `Failed to send ${release.rawTitle} to qBittorrent. Please check your qBittorrent connection.`;
+	// 2. Add new torrent to torrent client
+	const clientSuccess = await torrentClient.addTorrent(magnet);
+	if (!clientSuccess) {
+		const msg = `Failed to send ${release.rawTitle} to torrent client. Please check your connection.`;
 		logger.error(`[Auto-Download] ${msg}`);
 		await createNotification('auto_download_failed', game.id, game.title, msg);
 		return {
 			success: false,
 			skipped: false,
-			reason: 'qBittorrent add failed',
+			reason: 'Torrent client add failed',
 			releaseTitle: release.rawTitle,
 			selectionReason,
 			recommendationScore: release.recommendationScore
 		};
 	}
 
-	// 3. Wait for the new torrent to appear in qBittorrent
+	// 3. Wait for the new torrent to appear in torrent client
 	let newHash = extractMagnetHash(magnet);
 	let newTorrentFound = false;
 
@@ -217,7 +217,7 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 		const maxAttempts = 30; // Wait up to 30s
 		while (attempts < maxAttempts) {
 			try {
-				const currentTorrents = await qbitService.getActiveDownloads();
+				const currentTorrents = await torrentClient.getActiveDownloads();
 				const match = currentTorrents.find((t) => !existingHashes.has(t.hash));
 				if (match) {
 					newHash = match.hash;
@@ -233,22 +233,22 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 	}
 
 	if (!newTorrentFound || !newHash) {
-		const msg = `Failed to auto-download ${release.rawTitle} — torrent did not appear in qBittorrent within 30s.`;
+		const msg = `Failed to auto-download ${release.rawTitle} — torrent did not appear in torrent client within 30s.`;
 		logger.error(`[Auto-Download] ${msg}`);
 		await createNotification('auto_download_failed', game.id, game.title, msg);
 		return {
 			success: false,
 			skipped: false,
-			reason: 'qBittorrent add timed out',
+			reason: 'Torrent client add timed out',
 			releaseTitle: release.rawTitle,
 			selectionReason,
 			recommendationScore: release.recommendationScore
 		};
 	}
 
-	// 4. Remove old torrent from qBit only AFTER successful addition (keep files on disk)
+	// 4. Remove old torrent from client only AFTER successful addition (keep files on disk)
 	if (game.infoHash && game.infoHash !== newHash) {
-		const removed = await qbitService.removeTorrent(game.infoHash);
+		const removed = await torrentClient.removeTorrent(game.infoHash);
 		if (removed) {
 			logger.info(`[Auto-Download] Removed old torrent for '${game.title}' (hash: ${game.infoHash})`);
 		} else {
@@ -282,8 +282,8 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 			db.delete(releases).where(eq(releases.gameId, game.id)).run();
 		});
 	} catch (err) {
-		logger.error(`[Auto-Download] DB update failed after successful qBit add for '${game.title}': ${err}`);
-		const msg = `${release.rawTitle} was sent to qBittorrent but the database update failed. Please refresh.`;
+		logger.error(`[Auto-Download] DB update failed after successful torrent client add for '${game.title}': ${err}`);
+		const msg = `${release.rawTitle} was sent to torrent client but the database update failed. Please refresh.`;
 		await createNotification('auto_download_failed', game.id, game.title, msg);
 		return {
 			success: false,
@@ -296,7 +296,7 @@ export async function tryAutoDownloadForGame(gameId: number): Promise<AutoDownlo
 	}
 
 	const versionStr = release.parsedVersion ? `v${release.parsedVersion}` : 'latest version';
-	const msg = `${game.title} ${versionStr} was automatically downloaded and added to qBittorrent.`;
+	const msg = `${game.title} ${versionStr} was automatically downloaded and added to torrent client.`;
 	logger.info(`[Auto-Download] ✅ ${msg}`);
 	await createNotification('auto_download_success', game.id, game.title, msg);
 
