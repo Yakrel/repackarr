@@ -7,8 +7,10 @@ import {
 	extractVersion,
 	sanitizeSearchQuery,
 	fuzzyMatchTitles,
-	parseTorrentTitle
+	parseTorrentTitle,
+	cleanGameTitle
 } from './utils.js';
+import { getGameMetadata } from './igdb.js';
 import type { TorrentInfo } from './types.js';
 
 class TransmissionService {
@@ -104,8 +106,8 @@ class TransmissionService {
 			progress: t.percentDone,
 			dlspeed: t.rateDownload,
 			upspeed: t.rateUpload,
-			dl_limit: (t.downloadLimit || 0) * 1024,
-			up_limit: (t.uploadLimit || 0) * 1024,
+			dl_limit: t.downloadLimited ? (t.downloadLimit || 0) * 1024 : 0,
+			up_limit: t.uploadLimited ? (t.uploadLimit || 0) * 1024 : 0,
 			eta: t.eta,
 			category: Array.isArray(t.labels) ? t.labels.join(',') : '',
 			added_on: t.addedDate,
@@ -121,7 +123,7 @@ class TransmissionService {
 		const args = await this.rpcCall('torrent-get', {
 			fields: [
 				"id", "name", "hashString", "status", "percentDone", "rateDownload", "rateUpload",
-				"downloadLimit", "uploadLimit", "eta", "labels", "addedDate", "doneDate",
+				"downloadLimit", "uploadLimit", "downloadLimited", "uploadLimited", "eta", "labels", "addedDate", "doneDate",
 				"totalSize", "peersSendingToUs", "peersGettingFromUs", "comment"
 			]
 		});
@@ -130,7 +132,7 @@ class TransmissionService {
 		const allTorrents = args.torrents;
 		// Filter by label
 		const targetLabel = settings.TRANSMISSION_LABEL || 'games';
-		const filtered = allTorrents.filter((t: any) => t.labels && t.labels.includes(targetLabel));
+		const filtered = allTorrents.filter((t: any) => Array.isArray(t.labels) && t.labels.includes(targetLabel));
 		
 		return filtered.map((t: any) => this.mapTorrent(t));
 	}
@@ -145,7 +147,7 @@ class TransmissionService {
 			ids: [hash],
 			fields: [
 				"id", "name", "hashString", "status", "percentDone", "rateDownload", "rateUpload",
-				"downloadLimit", "uploadLimit", "eta", "labels", "addedDate", "doneDate",
+				"downloadLimit", "uploadLimit", "downloadLimited", "uploadLimited", "eta", "labels", "addedDate", "doneDate",
 				"totalSize", "peersSendingToUs", "peersGettingFromUs", "comment"
 			]
 		});
@@ -213,8 +215,6 @@ class TransmissionService {
 
 		if (isIgdbEnabled()) {
 			try {
-				const { getGameMetadata } = await import('./igdb.js');
-				const { cleanGameTitle } = await import('./utils.js');
 				const meta = await getGameMetadata(cleanGameTitle(title));
 				if (meta) {
 					coverUrl = meta.coverUrl || null;
@@ -259,7 +259,7 @@ class TransmissionService {
 		const targetLabel = settings.TRANSMISSION_LABEL || 'games';
 		let downloadDir = undefined;
 		if (this.defaultDownloadDir) {
-			downloadDir = `${this.defaultDownloadDir}/${targetLabel}`;
+			downloadDir = `${this.defaultDownloadDir.replace(/\/$/, '')}/${targetLabel}`;
 		}
 
 		const args: any = {
@@ -341,7 +341,7 @@ class TransmissionService {
 
 	async setTorrentDownloadLimit(hash: string, limitBytesPerSec: number): Promise<boolean> {
 		if (!hash || !(await this.login())) return false;
-		const limitKBps = Math.floor(limitBytesPerSec / 1024);
+		const limitKBps = Math.round(limitBytesPerSec / 1024);
 		const result = await this.rpcCall('torrent-set', {
 			ids: [hash],
 			downloadLimit: limitKBps,
@@ -352,7 +352,7 @@ class TransmissionService {
 
 	async setTorrentUploadLimit(hash: string, limitBytesPerSec: number): Promise<boolean> {
 		if (!hash || !(await this.login())) return false;
-		const limitKBps = Math.floor(limitBytesPerSec / 1024);
+		const limitKBps = Math.round(limitBytesPerSec / 1024);
 		const result = await this.rpcCall('torrent-set', {
 			ids: [hash],
 			uploadLimit: limitKBps,
