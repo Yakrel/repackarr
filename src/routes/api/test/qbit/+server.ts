@@ -20,7 +20,7 @@ export const POST: RequestHandler = async () => {
 			return json({ success: false, message: 'IP banned — too many failed login attempts' });
 		}
 		const text = await resp.text();
-		if (text.trim() === 'Ok.') {
+		if (resp.status === 204 || text.trim() === 'Ok.') {
 			await qbitService.login(true);
 			return json({ success: true, message: 'Connection successful' });
 		}
