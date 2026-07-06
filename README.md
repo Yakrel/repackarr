@@ -3,7 +3,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Docker Image](https://img.shields.io/badge/docker-ghcr.io%2Fyakrel%2Frepackarr-blue?logo=docker)](https://ghcr.io/yakrel/repackarr)
 
-**Repackarr** is a self-hosted companion for qBittorrent and Prowlarr that helps keep a game repack library up to date.
+**Repackarr** is a self-hosted companion for qBittorrent or Transmission, and Prowlarr that helps keep a game repack library up to date.
 
 Repackarr is designed for and tested exclusively with **RuTracker.org** and **NoNaMe Club (NNM-Club)** release formats. Other Prowlarr indexers are not supported, and title parsing or version matching will likely fail outside these two trackers.
 
@@ -22,9 +22,9 @@ Repackarr is designed for and tested exclusively with **RuTracker.org** and **No
 
 ## Features
 
-- **qBittorrent library sync**: Imports games from a dedicated qBittorrent category.
+- **Torrent client library sync**: Imports games from a dedicated qBittorrent category or Transmission label.
 - **Prowlarr update search**: Checks your configured RuTracker and NNM-Club indexers for newer matching releases.
-- **Manual update review**: Confirm, ignore, skip, or send releases to qBittorrent from the dashboard.
+- **Manual update review**: Confirm, ignore, skip, or send releases to your torrent client from the dashboard.
 - **AutoDL support**: Automatically download eligible updates globally or per game.
 - **Per-game controls**: Tune search queries, platform filters, ignored keywords, and AutoDL behavior.
 - **IGDB metadata**: Optional cover art, cleaner titles, and autocomplete support.
@@ -34,7 +34,7 @@ Repackarr is designed for and tested exclusively with **RuTracker.org** and **No
 
 ## How It Works
 
-1. Repackarr reads torrents from your configured qBittorrent category.
+1. Repackarr reads torrents from your configured torrent client (qBittorrent category or Transmission label).
 2. It creates a monitored game library from those torrents.
 3. It searches Prowlarr for newer matching releases.
 4. Matching releases appear on the dashboard for review.
@@ -44,7 +44,7 @@ The first full scan runs shortly after startup, then recurring scans run on the 
 
 ## Requirements
 
-- **qBittorrent** with WebUI enabled.
+- **qBittorrent** (WebUI enabled) or **Transmission**.
 - **Prowlarr** with RuTracker.org and/or NoNaMe Club configured.
 - **Docker Compose** for the recommended setup.
 - **IGDB credentials** are optional, but recommended for covers and autocomplete.
@@ -64,10 +64,16 @@ mkdir data logs
 Create a `.env` file:
 
 ```env
+# Torrent Client (Configure QBIT_* or TRANSMISSION_*, not both)
 QBIT_HOST=http://192.168.1.100:8080
 QBIT_USERNAME=admin
 QBIT_PASSWORD=adminadmin
 QBIT_CATEGORY=games
+
+# TRANSMISSION_HOST=http://192.168.1.100:9091
+# TRANSMISSION_USERNAME=admin
+# TRANSMISSION_PASSWORD=adminadmin
+# TRANSMISSION_LABEL=games
 
 PROWLARR_URL=http://192.168.1.100:9696
 PROWLARR_API_KEY=your_prowlarr_api_key
@@ -130,6 +136,10 @@ All core connection settings are configured through `.env`.
 | `QBIT_USERNAME` | - | qBittorrent username |
 | `QBIT_PASSWORD` | - | qBittorrent password |
 | `QBIT_CATEGORY` | `games` | qBittorrent category to monitor |
+| `TRANSMISSION_HOST` | - | Transmission RPC URL, for example `http://192.168.1.10:9091` |
+| `TRANSMISSION_USERNAME` | - | Transmission username |
+| `TRANSMISSION_PASSWORD` | - | Transmission password |
+| `TRANSMISSION_LABEL` | `games` | Transmission label to monitor |
 | `PROWLARR_URL` | - | Prowlarr URL |
 | `PROWLARR_API_KEY` | - | Prowlarr API key |
 | `IGDB_CLIENT_ID` | - | Optional IGDB client ID for covers and autocomplete |

@@ -17,6 +17,13 @@
 	const appVersion = APP_VERSION;
 	const changelog = [
 		{
+			version: '0.1.6',
+			notes: [
+				'Added Transmission as a supported download client',
+				'Fixed qBittorrent connection test issues'
+			]
+		},
+		{
 			version: '0.1.5',
 			notes: [
 				'Fixed a bug where torrents were deleted from qBittorrent before verifying that the new torrent was added successfully',
