@@ -38,6 +38,8 @@ class QBitService {
 						body: new URLSearchParams({ username: settings.QBIT_USERNAME, password: settings.QBIT_PASSWORD })
 					});
 					if (!resp.ok) return false;
+					const text = await resp.text();
+					if (resp.status !== 204 && text.trim() !== 'Ok.') return false;
 					const setCookie = resp.headers.get('set-cookie');
 					if (setCookie) this.cookies = setCookie.split(';')[0];
 					return true;
