@@ -1,6 +1,6 @@
 # Repackarr
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Docker Image](https://img.shields.io/badge/docker-ghcr.io%2Fyakrel%2Frepackarr-blue?logo=docker)](https://ghcr.io/yakrel/repackarr)
 
 **Repackarr** is a self-hosted companion for qBittorrent or Transmission, and Prowlarr that helps keep a game repack library up to date.
@@ -181,7 +181,7 @@ The following settings are managed from the web UI:
 
 ## License
 
-GPL v3 License. See [LICENSE](LICENSE) for more information.
+MIT License. See [LICENSE](LICENSE) for more information.
 
 ---
 
